@@ -210,3 +210,167 @@ sudo apt-get install xinetd
 和 nfs 命令的区别在于，tftp 命令不需要输入文件在 Ubuntu 中的完整路径，只需要输入文件名即可
 
 ![image-20230922140919382](image\13.png)
+
+#### EMMC 和 SD 卡操作命令
+
+uboot 支持 EMMC 和 SD 卡，因此也要提供 EMMC 和 SD 卡的操作命令。一般认为 EMMC 和 SD 卡是同一个东西，所以使用 MMC 来代指 EMMC 和 SD 卡。
+
+##### mmc命令
+
+mmc 是一系列的命令，其后可以跟不同的参数
+
+![image-20230922155722642](image\14.png)
+
+|      命令       |                     描述                      |
+| :-------------: | :-------------------------------------------: |
+|    mmc info     |               输出 MMC 设备信息               |
+|    mmc read     |              读取 MMC 中的数据。              |
+|    mmc wirte    |             向 MMC 设备写入数据。             |
+|   mmc rescan    |                扫描 MMC 设备。                |
+|    mmc part     |             列出 MMC 设备的分区。             |
+|     mmc dev     |                切换 MMC 设备。                |
+|    mmc list     |         列出当前有效的所有 MMC 设备。         |
+| mmc hwpartition |             设置 MMC 设备的分区。             |
+|  mmc bootbus……  |  设置指定 MMC 设备的 BOOT_BUS_WIDTH 域的值。  |
+| mmc bootpart……  | 设置指定 MMC 设备的 boot 和 RPMB 分区的大小。 |
+| mmc partconf……  | 设置指定 MMC 设备的 PARTITION_CONFG 域的值。  |
+|     mmc rst     |                 复位 MMC 设备                 |
+|   mmc setdsr    |             设置 DSR 寄存器的值。             |
+
+#### FAT 格式文件系统操作命令
+
+有时候需要在 uboot 中对 SD 卡或者 EMMC 中存储的文件进行操作，这时候就要用到文件 操作命令，跟文件操作相关的命令有：fatinfo、fatls、fstype、fatload 和 fatwrite，但是这些文件 操作命令只支持 FAT 格式的文件系统
+
+##### fatinfo命令
+
+fatinfo 命令用于查询指定 MMC 设备分区的文件系统信息
+
+![image-20230922171428625](image\16.png)
+
+##### fayls命令
+
+**fatls   <interface> [<dev[:part]>] [directory]**
+
+interface 是要查询的接口，比如 mmc
+dev 是要查询的设备号，part 是要查询的分区
+directory 是要查询的目录
+
+##### fstype 命令
+
+用于查看 MMC 设备某个分区的文件系统格式
+
+fstype <interface> <dev>:<part>
+
+##### fatload命令
+
+fatload 命令用于将指定的文件读取到 DRAM 中
+
+fatload <interface> [<dev[:part]> [<addr> [<filename> [bytes [pos]]]]]
+
+![image-20230922180921284](image\15.png)
+
+##### fatwrite 命令
+
+uboot 默认没有使能 fatwrite 命令，需要修改板子配置头文件，比如 mx6ullevk.h、 mx6ull_alientek_emmc.h 等等，板子不同，其配置头文件也不同。找到自己开发板对应的配置头 文件然后添加如下一行宏定义来使能 fatwrite 命令：
+
+```c
+#define CONFIG_FAT_WRITE /* 使能 fatwrite 命令 */
+```
+
+fatwrite <interface> <dev[:part]> <addr> <filename> <bytes>
+
+interface 为接口，比如 mmc，
+dev 是设备号，part 是分区，
+addr 是要写入的数据在 DRAM 中的起始地址，
+filename 是写入的数据文件名字，
+bytes 表示要写入多少字节的数据。
+
+#### EXT 格式文件系统操作命令
+
+uboot 有 ext2 和 ext4 这两种格式的文件系统的操作命令，常用的就四个命令，分别为： ext2load、ext2ls、ext4load、ext4ls 和 ext4write。
+这些命令的含义和使用与 fatload、fatls 和 fatwrite 一样，只是 ext2 和 ext4 都是针对 ext 文件系统的。
+
+#### BOOT 操作命令
+
+uboot 的本质工作是引导 Linux，所以 uboot 肯定有相关的 boot(引导)命令来启动 Linux。常 用的跟 boot 有关的命令有：bootz、bootm 和 boot。
+
+##### bootz 命令
+
+要启动 Linux，需要先将 Linux 镜像文件拷贝到 DRAM 中，如果使用到设备树的话也需要 将设备树拷贝到 DRAM 中。可以从 EMMC 或者 NAND 等存储设备中将 Linux 镜像和设备树文 件拷贝到 DRAM，也可以通过 nfs 或者 tftp 将 Linux 镜像文件和设备树文件下载到 DRAM 中。 不管用那种方法，只要能将 Linux 镜像和设备树文件存到 DRAM 中就行，然后使用 bootz 命令 来启动
+
+bootz 命令用于启动 zImage 镜像文件:
+
+**bootz [addr [initrd[:size]] [fdt]]**
+
+addr 是 Linux 镜像文件在 DRAM 中的位置
+initrd 是 initrd 文件在 DRAM 中的地址，如果不使用 initrd 的话使用‘-’代替即可
+fdt 就是设备树文件在 DRAM 中 的地址
+
+##### bootm命令
+
+bootm 和 bootz 功能类似，但是 bootm 用于启动 uImage 镜像文件。如果不使用设备树的话 启动 Linux 内核的命令如下：
+
+**bootm addr**
+
+addr 是 uImage 镜像在 DRAM 中的首地址。
+
+
+
+如果要使用设备树，那么 bootm 命令和 bootz 一样，命令格式如下：
+
+**bootm [addr [initrd[:size]] [fdt]]**
+
+其中 addr 是 **uImage** 在 DRAM 中的首地址，initrd 是 initrd 的地址，fdt 是设备树(.dtb)文件 在 DRAM 中的首地址，如果 initrd 为空的话，同样是用“-”来替代。
+
+##### boot 命令
+
+boot 命令也是用来启动 Linux 系统的，只是 boot 会读取环境变量 bootcmd 来启动 Linux 系 统，bootcmd 是一个很重要的环境变量！其名字分为“boot”和“cmd”，也就是“引导”和“命 令”，说明这个环境变量保存着引导命令，其实就是启动的命令集合，具体的引导命令内容是可 以修改的。比如我们要想使用 tftp 命令从网络启动 Linux 那么就可以设置 bootcmd 为“tftp  80800000 zImage; tftp 83000000 imx6ull-14x14-emmc-4.3-800x480-c.dtb; bootz 80800000 - 83000000”，然后使用 saveenv 将 bootcmd 保存起来。然后直接输入 boot 命令即可从网络启动 Linux 系统:
+
+```
+setenv bootcmd 'tftp 80800000 zImage; tftp 83000000 imx6ull-14x14-emmc-4.3-800x480-c.dtb; bootz 80800000 - 83000000'
+saveenv
+boot
+```
+
+#### 其他常用命令
+
+uboot 中还有其他一些常用的命令，比如 reset、go、run 和 mtest 等。
+
+##### reset 命令
+
+顾名思义就是复位的，输入“reset”即可复位重启
+
+##### go 命令
+
+go 命令用于跳到指定的地址处执行应用，命令格式如下：
+
+**go addr [arg ...]**
+
+addr 是应用在 DRAM 中的首地址，我们可以编译一下裸机例程的实验 13_printf，然后将编 译出来的 printf.bin 拷贝到 Ubuntu 中的 tftpboot 文件夹里面，注意，这里要拷贝 printf.bin 文件， 不需要在前面添加 IVT 信息，因为 uboot 已经初始化好了 DDR 了。使用 tftp 命令将 printf.bin 下载到开发板 DRAM 的 0X87800000 地址处，因为裸机例程的链接首地址就是 0X87800000， 最后使用 go 命令启动 printf.bin 这个应用，命令如下：
+
+tftp 87800000 printf.bin 
+go 87800000
+
+![image-20230922185555060](D:\Program Files(x86)\Linux\Linux_driver\image\17.png)
+
+##### run命令
+
+run 命令用于运行环境变量中定义的命令，比如可以通过“run bootcmd”来运行 bootcmd 中 的启动命令，但是 run 命令最大的作用在于运行我们自定义的环境变量。在后面调试 Linux 系 统的时候常常要在网络启动和 EMMC/NAND 启动之间来回切换，而 bootcmd 只能保存一种启 动方式，如果要换另外一种启动方式的话就得重写 bootcmd，会很麻烦。这里我们就可以通过 自定义环境变量来实现不同的启动方式，比如定义环境变量 mybootemmc 表示从 emmc 启动， 定义 mybootnet 表示从网络启动，定义 mybootnand 表示从 NAND 启动。如果要切换启动方式 的话只需要运行“run mybootxxx(xxx 为 emmc、net 或 nand)”即可。
+
+```
+setenv mybootemmc 'fatload mmc 1:1 80800000 zImage; fatload mmc 1:1 83000000 imx6ull-14x14-emmc-4.3-800x480-c.dtb;bootz 80800000 - 83000000'
+
+setenv mybootnet 'tftp 80800000 zImage; tftp 83000000 imx6ull-14x14-emmc-4.3-800x480-c.dtb; bootz 80800000 - 83000000'
+
+saveenv
+```
+
+##### mtest 命令
+
+mtest 命令是一个简单的内存读写测试命令，可以用来测试自己开发板上的 DDR，命令格 式如下：
+
+**mtest [start [end [pattern [iterations]]]]**
+
+start 是要测试的 DRAM 开始地址，
+end 是结束地址，
+比如我们测试 0X80000000~0X80001000 这段内存，输入“mtest 80000000 80001000”
