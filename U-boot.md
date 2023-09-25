@@ -374,3 +374,195 @@ mtest 命令是一个简单的内存读写测试命令，可以用来测试自�
 start 是要测试的 DRAM 开始地址，
 end 是结束地址，
 比如我们测试 0X80000000~0X80001000 这段内存，输入“mtest 80000000 80001000”
+
+## Uboot启动流程
+
+### 链接脚本和_start的处理
+
+#### 链接脚本：
+
+uboot入口地址为_start  （u-boot.lds中的ENTRY）
+__image_copy_start -》 0x87800000
+.vetcors  ->  0x87800000 存放中断向量表
+arch/arm/cpu/armv7/start.o start.c
+_ _image_copy_end -》 0x8785dc6c
+
+__rel_dyn_start ->  0x8785dc6c     rel段
+_ _rel_dyn_end -> 0x878668a4
+
+__end -》 0x878668a4
+
+_image_binary_end -》  0x878668a4
+
+__bss_start   -》 0x8785dc6c bss段。_
+ _bss_end -》 0x878a8d74
+
+#### reset函数：
+
+跳转到save_boot_params，然后再跳转到save_boot_params_ret：
+bicne=bic + ne	如果前面判断相等的语句不相等，那么进行bic运算
+
+1. reset函数目的是将处理器设置为SVC模式，并且关闭FIQ和IRQ.
+2. 设置中断向量。
+3. 初始化CP15
+4. 跳转到lowlevel_init函数
+
+#### lowlevel_init函数
+
+初始化sp为：CONFIG_SYS_INIT_SP_ADDR
+在include/configs/ux6ullevk.h中定义：\#define CONFIG_SYS_INIT_SP_ADDR \ (CONFIG_SYS_INIT_RAM_ADDR + CONFIG_SYS_INIT_SP_OFFSET)
+
+\#define CONFIG_SYS_INIT_RAM_ADDR   IRAM_BASE_ADDR
+
+\#define IRAM_BASE_ADDR      0x00900000   (6ULL内部OCRAN地址)
+
+\#define CONFIG_SYS_INIT_SP_OFFSET \
+  (CONFIG_SYS_INIT_RAM_SIZE - GENERATED_GBL_DATA_SIZE)
+
+\#define CONFIG_SYS_INIT_RAM_SIZE   IRAM_SIZE
+\#define IRAM_SIZE           0x00020000
+
+\#define GENERATED_GBL_DATA_SIZE 256 
+
+0x00900000 + CONFIG_SYS_INIT_SP_OFFSE =>
+0x00900000 + CONFIG_SYS_INIT_RAM_SIZE - GENERATED_GBL_DATA_SIZE =>
+0x00900000 **+** 0x00020000 – 256 = 0x0091ff00
+
+设置SP指针、R9寄存器
+
+跳转到s_init函数
+
+#### s_init函数
+
+此函数不是汇编函数，是存放在arch\arm\cpu\armv7\mx6\soc.c中的C语言函数
+
+我们的芯片将直接返回，相当于空函数
+
+将返回lowlevel_init，然后出栈在返回到cpu_init_crit，再返回save_boot_params_ret，然后跳转到_main函数。
+
+#### _main函数
+
+设置 sp 指针为 CONFIG_SYS_INIT_SP_ADDR，也就是 sp 指向 0X0091FF00。
+
+sp 做 8 字节对齐。
+
+读取 sp 到寄存器 r0 里面，此时 r0=0X0091FF00。
+
+调用函数 board_init_f_alloc_reserve，此函数有一个参数，参数为 r0 中的值，也 就是 0X0091FF00，此函数定义在文件 common/init/board_init.c 中
+
+将 r0 写入到 sp 里面，r0 保存着函数 board_init_f_alloc_reserve 的返回值，所以这一句也就是设置 sp=0X0091FA00。主要目的是留出早期的 malloc 内存区域和 gd 内存区域，其中 CONFIG_SYS_MALLOC_F_LEN=0X400( 在 文 件 include/generated/autoconf.h 中定义 ) ， sizeof(struct global_data)=248(GD_SIZE 值)，有返回值的，返回值为新的 top 值
+
+第 89 行，将 r0 寄存器的值写到寄存器 r9 里面，因为 r9 寄存器存放着全局变量 gd 的地址， 在文件 arch/arm/include/asm/global_data.h
+
+uboot 中定义了一个指向 gd_t 的指针 gd，gd 存放在寄存器 r9 里面 的，因此 gd 是个全局变量。gd_t 是个结构体，在 include/asm-generic/global_data.h 里面有定义
+
+因此89行就是设置 gd 所指向的位置，也就是 gd 指向 0X0091FA00。
+
+调用函数 board_init_f_init_reserve，此函数在文件 common/init/board_init.c 中有定义，用于初始化 gd，其实就是清零处理。另外，此函数还设置了 gd->malloc_base 为 gd 基地址+gd 大小=0X0091FA00+248=0X0091FAF8，在做 16 字节对齐，最 终 gd->malloc_base=0X0091FB00，这个也就是 early malloc 的起始地址。
+
+调用 board_init_f 函数，此函数定义在文件 common/board_f.c 中。主要用来初始 化 DDR，定时器，完成代码拷贝等等
+
+重新设置环境(sp 和 gd)、获取 gd->start_addr_sp 的值赋给 sp，在函数 board_init_f 中会初始化 gd 的所有成员变量，其中 gd->start_addr_sp=0X9EF44E90， 所以这里相当于设置 sp=gd->start_addr_sp=0X9EF44E90。0X9EF44E90 是 DDR 中的地址，说明新的 sp 和 gd 将会存 放到 DDR 中，而不是内部的 RAM 了。
+
+获取 gd->bd 的地址赋给 r9，此时 r9 存放的是老的 gd，这里通过获取 gd->bd 的 地址来计算出新的 gd 的位置。GD_BD=0
+
+新的 gd 在 bd 下面，所以 r9 减去 gd 的大小就是新的 gd 的位置，获取到新的 gd 的位置以后赋值给 r9。
+
+设置 lr 寄存器为 here，这样后面执行其他函数返回的时候就返回到了第 122 行 的 here 位置处。
+
+详细参考开发指南P810
+
+#### board_init_f函数
+
+作用：
+
+1. 初始化一系列外设，比如串口、定时器，或者打印一些消息等。
+2. 初始化 gd 的各个成员变量，uboot 会将自己重定位到 DRAM 最后面的地址区域，也就 是将自己拷贝到 DRAM 最后面的内存区域中。这么做的目的是给 Linux 腾出空间，防止 Linux kernel 覆盖掉 uboot，将 DRAM 前面的区域完整的空出来。在拷贝之前肯定要给 uboot 各部分 分配好内存位置和大小，比如 gd 应该存放到哪个位置，malloc 内存池应该存放到哪个位置等 等。这些信息都保存在 gd 的成员变量中，因此要对 gd 的这些成员变量做初始化。最终形成一 个完整的内存“分配图”，在后面重定位 uboot 的时候就会用到这个内存“分配图”。
+
+详细见开发指南P812
+
+#### relocate_code 函数
+
+用于代码拷贝，此函数定义在文件 arch/arm/lib/relocate.S。
+见开发指南P819
+
+#### relocate_vectors 函数
+
+用于重定位向量表，此函数定义在文件 relocate.S
+
+见开发指南P825
+
+#### board_init_r 函数
+
+在board_init_f函数里面会调用一系列的函数来初始化一些外设和 gd 的成员变量。但是 board_init_f 并没有初始化所有的外设，还需要做一些后续工作，这 些后续工作就是由函数 board_init_r 来完成的，board_init_r 函数定义在文件 common/board_r.c
+
+见开发指南P826
+
+####  run_main_loop 函数
+
+uboot 启动以后会进入 3 秒倒计时，如果在 3 秒倒计时结束之前按下按下回车键，那么就 会进入 uboot 的命令模式，如果倒计时结束以后都没有按下回车键，那么就会自动启动 Linux 内 核 ， 这 个功 能 就 是由 run_main_loop 函 数 来 完成 的 。 run_main_loop 函 数 定义 在 文件 common/board_r.c 中
+
+见开发指南P830
+
+#### cli_loop 函数
+
+cli_loop 函数是 uboot 的命令行处理函数，我们在 uboot 中输入各种命令，进行各种操作就 是有 cli_loop 来处理的，此函数定义在文件 common/cli.c 中
+
+见开发指南P836
+
+#### cmd_process 函数
+
+uboot 使用宏 U_BOOT_CMD 来定义命令，宏 U_BOOT_CMD 定义在文件 include/command.h 中
+
+U_BOOT_CMD 是 U_BOOT_CMD_COMPLETE 的特例，将 U_BOOT_CMD_COMPLETE 的 最 后 一 个 参 数 设 置 成 NULL 就 是 U_BOOT_CMD 。
+
+见开发指南P839
+
+### bootz 启动 Linux 内核过程
+
+#### images 全局变量
+
+不管是 bootz 还是 bootm 命令，在启动 Linux 内核的时候都会用到一个重要的全局变量： images，images 在文件 cmd/bootm.c
+
+```c
+bootm_headers_t images; /* pointers to os/initrd/fdt images */
+```
+
+images 是 bootm_headers_t 类型的全局变量，bootm_headers_t 是个 boot 头结构体，在文件 include/image.h 中定义。
+
+#### do_bootz 函数
+
+bootz 命令的执行函数为 do_bootz，在文件 cmd/bootm.c中定义
+
+见开发指南P845
+
+#### bootz_start 函数
+
+bootz_srart 函数也定义在文件 cmd/bootm.c 中
+
+见开发指南P846
+
+#### do_bootm_states 函数
+
+do_bootz 最 后 调 用 的 就 是 函 数 do_bootm_states ，而且在 bootz_start 中 也 调 用 了 do_bootm_states 函数.此函数 定义 在文 件 common/bootm.c 中
+
+函数 do_bootm_states 根据不同的 BOOT 状态执行不同的代码段
+
+P开发指南P852.
+
+#### bootm_os_get_boot_func 函数
+
+do_bootm_states 会调用 bootm_os_get_boot_func 来查找对应系统的启动函数，此函数定义 在文件 common/bootm_os.c 中
+
+开发指南P854
+
+#### do_bootm_linux 函数
+
+do_bootm_linux 就是最终启动 Linux 内核的函数，此函数定 义在文件 arch/arm/lib/bootm.c
+
+开发指南P855
+
+![image-20230925160755482](D:\Program Files(x86)\Linux\Linux_driver\image\18.png)
+
+## U-Boot移植
+
