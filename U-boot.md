@@ -566,3 +566,17 @@ do_bootm_linux 就是最终启动 Linux 内核的函数，此函数定 义在文
 
 ## U-Boot移植
 
+要能运行U-Boot，DDR或者叫DRAM，串口，SD、EMMC、NAND等必须要初始化并成功运行。
+
+NXP官方的U-boot在ALPHA开发板上：
+
+1. uboot能正常启动
+2. LCD驱动要根据所使用的屏幕修改。
+3. NET初始化失败。
+
+所以需要对NXP官方提供的U-Boot进行修改。
+
+### 修改NXP官方U-boot的步骤：
+
+#### 1、添加板子默认配置文件：
+
