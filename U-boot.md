@@ -578,5 +578,155 @@ NXP官方的U-boot在ALPHA开发板上：
 
 ### 修改NXP官方U-boot的步骤：
 
-#### 1、添加板子默认配置文件：
+#### 1、添加开发板默认配置文件：
 
+- 先在 configs 目录下创建默认配置文件，复制 mx6ull_14x14_evk_emmc_defconfig，然后重命名为 mx6ull_alientek_emmc_defconfig
+- 修改文件，主要是开发板名称，见开发指南P867
+
+#### 2、添加开发板对应的头文件
+
+- 在 目 录 include/configs 下 添 加 I.MX6ULL-ALPHA 开 发 板 对 应 的 头 文 件 ， 复 制 include/configs/mx6ullevk.h，并重命名为 mx6ull_alientek_emmc.h
+- 注意修改文件中防止重导入部分的代码
+- mx6ull_alientek_emmc.h 里面有很多宏定义，这些宏定义基本用于配置 uboot，也有一些 I.MX6ULL 的配置项目。如果我们自己要想使能或者禁止 uboot 的某些功能，那就在 mx6ull_alientek_emmc.h 里面做修改即可
+- 见开发指南P870
+
+#### 3、添加开发板对应的板级文件夹
+
+- uboot 中每个板子都有一个对应的文件夹来存放板级文件，比如开发板上外设驱动文件等 等。
+- NXP 的 I.MX 系列芯片的所有板级文件夹都存放在 board/freescale 目录下，在这个目录下 有个名为 mx6ullevk 的文件夹，这个文件夹就是 NXP 官方 I.MX6ULL EVK 开发板的板级文件 夹。复制 mx6ullevk，将其重命名为 mx6ull_alientek_emmc
+- 进 入 mx6ull_alientek_emmc 目 录 中 ， 将 其 中 的 mx6ullevk.c 文 件 重 命 名 为 mx6ull_alientek_emmc.c
+- mx6ull_alientek_emmc 目录下的 Makefile 文件（目标文件）。见开发指南P876
+- 修改 mx6ull_alientek_emmc 目录下的 imximage.cfg 文件。见开发指南P876
+- 修改 mx6ull_alientek_emmc 目录下的 Kconfig 文件。见开发指南P876
+- 修改 mx6ull_alientek_emmc 目录下的 MAINTAINERS 文件。见开发指南P877
+
+#### 4、修改U-Boot 图形界面配置文件
+
+见开发指南P877
+
+#### 5、使用新添加的板子配置编译 uboot
+
+见开发指南P878
+
+### 开发板驱动的修改
+
+一般 uboot 中修改驱动基本都是在 xxx.h 和 xxx.c 这两个文件中进行的，xxx 为板子名称， 比如 mx6ull_alientek_emmc.h 和 mx6ull_alientek_emmc.c 这两个文件
+
+#### 1、LCD驱动修改
+
+一般修改 LCD 驱动重点注意以下几点：
+
+- LCD 所使用的 GPIO，查看 uboot 中 LCD 的 IO 配置是否正确。
+- LCD 背光引脚 GPIO 的配置。
+- LCD 配置参数是否正确。
+
+这里由于使用的开发板与NXP官方 I.MX6ULL 开发板的原理图一致，那么LCD 的 IO 和背光 IO 都一样的，所以 IO 部分就不用修改了。只需要修改LCD参数即可。
+
+具体修改见开发指南P879
+
+#### 2、底板网络驱动修改
+
+使用开发板的PHY芯片为：SR8201F。
+
+修改 ENET1 网络驱动的话重点就三点：
+
+- ENET1 复位引脚初始化。
+- SR8201F 的器件 ID。
+- SR8201F 驱动
+
+具体修改见开发指南P894
+
+### 其他需要修改的地方
+
+在 uboot 启动信息中会有“Board: MX6ULL 14x14 EVK”这一句，也就是说板子名字为 “MX6ULL 14x14 EVK”，要将其改为我们所使用的板子名字，比如“MX6ULL ALIENTEK  EMMC”或者“MX6ULL ALIENTEK NAND”。打开文件 mx6ull_alientek_emmc.c，找到函数 checkboard，将其中输出的部分修改即可。
+
+## Uboot启动配置
+
+uboot 中有两个非常重要的环境变量 bootcmd 和 bootargs，接下来看一下这两个环境变量。 bootcmd 和 bootagrs 是采用类似 shell 脚本语言编写的，里面有很多的变量引用，这些变量其实 都是环境变量，有很多是 NXP 自 己 定 义 的 。 文 件 mx6ull_alientek_emmc.h 中的宏 CONFIG_EXTRA_ENV_SETTINGS 保存着这些环境变量的默认值。 见开发指南P902
+
+### 环境变量 bootcmd
+
+bootcmd 保存着 uboot 默认命令，uboot 倒计时结束以 后就会执行 bootcmd 中的命令。这些命令一般都是用来启动 Linux 内核的，比如读取 EMMC 或 者 NAND Flash 中的 Linux 内核镜像文件和设备树文件到 DRAM 中，然后启动 Linux 内核。可 以在 uboot 启动以后进入命令行设置 bootcmd 环境变量的值。如果 EMMC 或者 NAND 中没有 保存 bootcmd 的值，那么 uboot 就会使用默认的值，板子第一次运行 uboot 的时候都会使用默 认值来设置 bootcmd 环境变量。
+
+可以在文件include/env_default.h中修改bootcmd的默认值，官方bootcmd分析见开发指南P903
+
+NXP 官方将 CONFIG_BOOTCOMMAND 写的这么复杂只有一个目的：为了兼容多个板子， 所以写了个很复杂的脚本。当我们明确知道我们所使用的板子的时候就可以大幅简化宏 CONFIG_BOOTCOMMAND 的 设 置 ， 比 如 我 们 要 从 EMMC 启动，那么宏 CONFIG_BOOTCOMMAND 就可简化为：
+
+```c
+#define CONFIG_BOOTCOMMAND \
+ 		"mmc dev 1;" \
+ 		"fatload mmc 1:1 0x80800000 zImage;" \
+ 		"fatload mmc 1:1 0x83000000 imx6ull-alientek-emmc.dtb;" \
+ 		"bootz 0x80800000 - 0x83000000;"
+
+```
+
+### 环境变量 bootargs
+
+bootargs 保存着 uboot 传递给 Linux 内核的参数。bootargs 环境变量是由 mmcargs 设置的，mmcargs 环境变量如下：
+
+```
+mmcargs=setenv bootargs console=${console},${baudrate} root=${mmcroot}
+```
+
+其中 console=ttymxc0，baudrate=115200，mmcroot=/dev/mmcblk1p2 rootwait rw，因此将 mmcargs 展开以后就是：
+
+```
+mmcargs=setenv bootargs console= ttymxc0, 115200 root= /dev/mmcblk1p2 rootwait rw
+```
+
+可以看出环境变量 mmcargs 就是设置 bootargs 的值为“console= ttymxc0, 115200 root=  /dev/mmcblk1p2 rootwait rw”，bootargs 就是设置了很多的参数的值，这些参数 Linux 内核会使 用到，常用的参数有：
+
+#### console
+
+console 用来设置 linux 终端(或者叫控制台)，也就是通过什么设备来和 Linux 进行交互，是 串口还是 LCD 屏幕？如果是串口的话应该是串口几等等。一般设置串口作为 Linux 终端，这样 我们就可以在电脑上通过 SecureCRT 来和 linux 交互了。这里设置 console 为 ttymxc0，因为 linux 启动以后 I.MX6ULL 的串口 1 在 linux 下的设备文件就是/dev/ttymxc0，在 Linux 下，一切皆文 件。
+
+ttymxc0 后面有个“,115200”，这是设置串口的波特率，console=ttymxc0,115200 综合起来就是设置 ttymxc0（也就是串口 1）作为 Linux 的终端，并且串口波特率设置为 115200。
+
+#### root
+
+root 用来设置根文件系统的位置，root=/dev/mmcblk1p2 用于指明根文件系统存放在 mmcblk1 设备的分区 2 中。EMMC 版本的核心板启动 linux 以后会存在/dev/mmcblk0、 /dev/mmcblk1、/dev/mmcblk0p1、/dev/mmcblk0p2、/dev/mmcblk1p1和/dev/mmcblk1p2 这样的文 件，其中/dev/mmcblkx(x=0~n)表示 mmc 设备，而/dev/mmcblkxpy(x=0~n,y=1~n)表示 mmc 设备 x 的分区 y。在 I.MX6U-ALPHA 开发板中/dev/mmcblk1 表示 EMMC，而/dev/mmcblk1p2 表示 EMMC 的分区 2。
+
+root 后面有“rootwait rw”，rootwait 表示等待 mmc 设备初始化完成以后再挂载，否则的话 mmc 设备还没初始化完成就挂载根文件系统会出错的。rw 表示根文件系统是可以读写的，不加 rw 的话可能无法在根文件系统中进行写操作，只能进行读操作。
+
+#### rootfstype
+
+此选项一般配置 root 一起使用，rootfstype 用于指定根文件系统类型，如果根文件系统为 ext 格式的话此选项无所谓。如果根文件系统是 yaffs、jffs 或 ubifs 的话就需要设置此选项，指 定根文件系统的类型。
+
+### uboot启动Linux
+
+#### 从 EMMC 启动 Linux 系统
+
+从 EMMC 启动也就是将编译出来的 Linux 镜像文件 zImage 和设备树文件保存在 EMMC 中，uboot 从 EMMC 中读取这两个文件并启动，这个是我们产品最终的启动方式。但是我们目 前还没有讲解如何移植 linux 和设备树文件，以及如何将 zImage 和设备树文件保存到 EMMC 中。不过大家拿到手的 I.MX6U-ALPHA 开发板(EMMC 版本)已经将 zImage 文件和设备树文件 烧写到了 EMMC 中，所以我们可以直接读取来测试。先检查一下 EMMC 的分区 1 中有没有 zImage 文件和设备树文件，输入命令“ls mmc 1:1”
+
+设置 bootargs 和 bootcmd 这两个环境变量，设置如下：
+
+```
+setenv bootargs 'console=ttymxc0,115200 root=/dev/mmcblk1p2 rootwait rw'
+setenv bootcmd 'mmc dev 1; fatload mmc 1:1 80800000 zImage; fatload mmc 1:1 83000000 imx6ull-alientek-emmc.dtb; bootz 80800000 - 83000000;'
+saveenv
+```
+
+然后输入boot 或者 run bootcmd即可启动Linux内核
+
+#### 从网络启动 Linux 系统
+
+从网络启动 linux 系统的唯一目的就是为了调试！不管是为了调试 linux 系统还是 linux 下 的驱动。每次修改 linux 系统文件或者 linux 下的某个驱动以后都要将其烧写到 EMMC 中去测 试，这样太麻烦了。我们可以设置 linux 从网络启动，也就是将 linux 镜像文件和根文件系统都 放到 Ubuntu 下某个指定的文件夹中，这样每次重新编译 linux 内核或者某个 linux 驱动以后只 需要使用 cp 命令将其拷贝到这个指定的文件夹中即可，这样就不用需要频繁的烧写 EMMC， 这样就加快了开发速度。我们可以通过 nfs 或者 tftp 从 Ubuntu 中下载 zImage 和设备树文件， 根文件系统的话也可以通过 nfs 挂载，不过本小节我们不讲解如何通过 nfs 挂载根文件系统，这 个在讲解根文件系统移植的时候再讲解。这里我们使用 tftp 从 Ubuntu 中下载 zImage 和设备树 文件，前提是要将 zImage 和设备树文件放到 Ubuntu 下的 tftp 目录中
+
+设置 bootargs 和 bootcmd 这两个环境变量，设置如下：
+
+```
+setenv bootargs 'console=ttymxc0,115200 root=/dev/mmcblk1p2 rootwait rw'
+setenv bootcmd 'tftp 80800000 zImage; tftp 83000000 imx6ull-alientek-emmc.dtb; bootz 80800000 - 83000000'
+saveenv
+```
+
+一开始是通过tftp下载zImage和imx6ull-alientek-emmc.dtb这两个文件，下载完成以后就是启动 Linux 内核
+
+### 总结
+
+1. 不管是购买的开发板还是自己做的开发板，基本都是参考半导体厂商的 dmeo 板，而 半导体厂商会在他们自己的开发板上移植好 uboot、linux kernel 和 rootfs 等，最终制作好 BSP 包提供给用户。我们可以在官方提供的 BSP 包的基础上添加我们的板子，也就是俗称的移植。
+2. 我们购买的开发板或者自己做的板子一般都不会原封不动的照抄半导体厂商的 demo 板，都会根据实际的情况来做修改，既然有修改就必然涉及到 uboot 下驱动的移植。
+3. 一般 uboot 中需要解决串口、NAND、EMMC 或 SD 卡、网络和 LCD 驱动，因为 uboot 的主要目的就是启动 Linux 内核，所以不需要考虑太多的外设驱动。
+4. 在 uboot 中添加自己的板子信息，根据自己板子的实际情况来修改 uboot 中的驱动。
+5. 
