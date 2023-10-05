@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"ide.h": "c",
+			"init.h": "c",
+			"delay.h": "c",
+			"interrupt.h": "c",
+			"hrtimer.h": "c",
+			"hardirq.h": "c",
+			"irqflags.h": "c",
+			"irq.h": "c"
+		}
+	}
+}
