@@ -182,3 +182,59 @@ void unregister_chrdev_region(dev_t from, unsigned count)
 
 以 chrdevbase 这个虚拟设备为例，完整的编写一个字符设备驱动模块。chrdevbase 不是实际存在的一个设备，是为了方便讲解字符设备的开发而引入的一个虚拟设备。chrdevbase 设备有两个缓冲区，一个为读缓冲区，一个为写缓冲区，这两个缓冲区的大小都为 100 字节。在应用程序中可以向 chrdevbase 设备的写缓冲区中写入数据，从读缓冲区中读取数据。chrdevbase 这个虚拟设备的功能很简单，但是它包含了字符设备的最基本功能。
 
+#### 1、准备工作
+
+创建VSCode工程并给工程命名
+
+添加头文件路径，需要用到Linux 源码中的函数，所以需要添加 Linux 源码中的头文件路径。
+已有c_cpp_properties.json文件。
+
+#### 2、编写驱动程序
+
+新建 chrdevbase.c，完成驱动的编写
+
+主要是实现各个函数然后初始化给到设备操作函数结构体
+
+详见开发指南P1070
+
+#### 3、编写测试APP
+
+编写测试 APP 就是编写 Linux 应用，需要用到 C 库里面和文件操作有关的一些函数，比如 open、read、write 和 close 这四个函数。
+
+详见开发指南P1072
+
+#### 4、编译驱动程序和测试App
+
+```makefile
+KERNELDIR := /home/rodney/linux/linux-imx-rel_imx_4.1.15_2.1.0_ga_alientek
+CURRENT_PATH := $(shell pwd)
+obj-m := chrdevbase.o
+
+build: kernel_modules
+
+kernel_modules:
+	$(MAKE) -C $(KERNELDIR) M=$(CURRENT_PATH) modules
+clean:
+	$(MAKE) -C $(KERNELDIR) M=$(CURRENT_PATH) clean
+```
+
+编译测试 APP：
+
+arm-linux-gnueabihf-gcc chrdevbaseApp.c -o chrdevbaseApp
+
+#### 5、运行测试
+
+1. 网络启动并将文件拷贝到rootfs/lib/modules/4.1.15中
+
+2. 加载 chrdevbase.ko 驱动文件
+
+   insmod chrdevbase.ko   或    modprobe chrdevbase.ko
+   可能遇到modprobe 提示无法打开“modules.dep”这个文件，直接运行depmod即可
+
+3. 创建设备节点文件
+
+   mknod /dev/chrdevbase c 200 0
+
+4. chrdevbase 设备操作测试
+
+![image-20231005221454487](image\20.png)
