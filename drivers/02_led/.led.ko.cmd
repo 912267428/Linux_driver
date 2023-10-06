@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/02_led/led.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/02_led/led.ko /home/rodney/Desktop/Linux_driver/drivers/02_led/led.o /home/rodney/Desktop/Linux_driver/drivers/02_led/led.mod.o
