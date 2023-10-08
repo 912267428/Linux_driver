@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/06_beep/beep.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/06_beep/beep.ko /home/rodney/Desktop/Linux_driver/drivers/06_beep/beep.o /home/rodney/Desktop/Linux_driver/drivers/06_beep/beep.mod.o
