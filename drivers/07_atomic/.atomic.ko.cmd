@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/07_atomic/atomic.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/07_atomic/atomic.ko /home/rodney/Desktop/Linux_driver/drivers/07_atomic/atomic.o /home/rodney/Desktop/Linux_driver/drivers/07_atomic/atomic.mod.o
