@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "type_traits": "c",
+        "module.h": "c",
+        "delay.h": "c"
+    }
+}
