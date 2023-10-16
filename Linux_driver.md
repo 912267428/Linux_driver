@@ -913,3 +913,244 @@ Linux 驱动讲究驱动分离与分层，pinctrl 和 gpio 子系统就是驱动
 2. 根据获取到的 pin 信息来设置 pin 的复用功能
 3. 根据获取到的 pin 信息来设置 pin 的电气特性，比如上/下拉、速度、驱动能力等。
 
+### linux中的并发与竞争
+
+原子操作、自旋锁、信号量、互斥量对linux中资源的保护实验，详见47、48章。
+
+### Linux内核定时器
+
+硬件定时器提供时钟源，时钟源的频率可以设置， 设置好以后就周期性的产生定时中断，系统使用定时中断来计时。中断周期性产生的频率就是系统频率，
+也叫做节拍率(tick rate)(有的资料也叫系统频率)，比如 1000Hz，100Hz 等等说的就是系统节拍率。系统节拍率是可以设置的，单位是 Hz，我们在编译 Linux 内核的时候可以通过图形化界面设置系统节拍率。
+
+Linux 内核使用全局变量 jiffies 来记录系统从启动以来的系统节拍数，系统启动的时候会 将 jiffies 初始化为 0，jiffies 定义在文件 include/linux/jiffies.h 中
+
+```c
+extern u64 __jiffy_data jiffies_64;
+extern unsigned long volatile __jiffy_data jiffies;
+```
+
+当我们访问 jiffies 的时候其实访问的是 jiffies_64 的低 32 位，使用 get_jiffies_64 这个函数 可以获取 jiffies_64 的值。在 32 位的系统上读取 jiffies 的值，在 64 位的系统上 jiffes 和 jiffies_64 表示同一个变量，因此也可以直接读取 jiffies 的值。所以不管是 32 位的系统还是 64 位系统， 都可以使用 jiffies。
+
+处理 32 位 jiffies 的绕回显得尤为重要， Linux 内核提供了几个 API 函数来处理绕回：
+
+![image-20231016153646060](image\23.png)
+
+为了方便开发，Linux 内核提供了几个 jiffies 和 ms、us、ns 之间的转换函数
+
+![image-20231016153721766](image\24.png)
+
+Linux 内核使用 timer_list 结构体表示内核定时器，timer_list 定义在文件 include/linux/timer.h 中，定义如下：
+
+![image-20231016153759085](image\25.png)
+
+#### API函数：
+
+##### 1、init_timer 函数  
+
+负责初始化 timer_list 类型变量，当我们定义了一个 timer_list 变量以后一定 要先用 init_timer 初始化一下。
+![image-20231016153937696](image\26.png)
+
+##### 2、add_timer 函数
+
+用于向 Linux 内核注册定时器，使用 add_timer 函数向内核注册定时器以后， 定时器就会开始运行
+
+##### ![image-20231016154008925](image\27.png)
+
+##### 3、del_timer 函数
+
+用于删除一个定时器，不管定时器有没有被激活，都可以使用此函数删除。 在多处理器系统上，定时器可能会在其他的处理器上运行，因此在调用 del_timer 函数删除定时 器之前要先等待其他处理器的定时处理器函数退出。
+![image-20231016154058720](image\28.png)
+
+##### 4、del_timer_sync 函数
+
+del_timer_sync 函数是 del_timer 函数的同步版，会等待其他处理器使用完定时器再删除， del_timer_sync 不能使用在中断上下文中。
+![image-20231016154146562](image\29.png)
+
+##### 5、mod_timer 函数
+
+用于修改定时值，如果定时器还没有激活的话，mod_timer 函数会激活定时 器！
+![image-20231016154237262](image\30.png)
+
+### Linux中断
+
+#### 裸机实验里面中断的处理方法：
+
+1. 使能中断，初始化相应的寄存器。
+2. 注册中断服务函数，也就是向 irqTable 数组的指定标号处写入中断服务函数
+3. 中断发生以后进入 IRQ 中断服务函数，在 IRQ 中断服务函数在数组 irqTable 里面查找 具体的中断处理函数，找到以后执行相应的中断处理函数。
+
+#### Linux中断：
+
+每个中断都有一个中断号，通过中断号即可区分不同的中断，有的资料也把中断号叫做中 断线。在 Linux 内核中使用一个 int 变量表示中断号
+
+#### request_irq 函数
+
+在 Linux 内核中要想使用某个中断是需要申请的，request_irq 函数用于申请中断，**request_irq 函数可能会导致睡眠，因此不能在中断上下文或者其他禁止睡眠的代码段中使用** request_irq 函 数。request_irq 函数会激活(使能)中断，所以不需要我们手动去使能中断，request_irq 函数原型 如下：
+![image-20231016155049102](image\31.png)![image-20231016155107623](image\32.png)
+
+表中的这些标志可以通过“|”来实现多种组合。
+
+**name：**中断名字，设置以后可以在/proc/interrupts 文件中看到对应的中断名字。
+ **dev：**如果将 flags 设置为 IRQF_SHARED 的话，dev 用来区分不同的中断，**一般情况下将 dev 设置为设备结构体**，dev 会传递给中断处理函数 irq_handler_t 的第二个参数。
+ **返回值：**0 中断申请成功，其他负值 中断申请失败，如果返回-EBUSY 的话表示中断已经被申请了
+
+#### free_irq 函数
+
+使用中断的时候需要通过 request_irq 函数申请，使用完成以后就要通过 free_irq 函数释放 掉相应的中断。如果中断不是共享的，那么 free_irq 会删除中断处理函数并且禁止中断。
+![image-20231016155337309](image\33.png)
+
+#### 中断处理函数
+
+使用 request_irq 函数申请中断的时候需要设置中断处理函数，中断处理函数格式如下所示：
+
+```
+irqreturn_t (*irq_handler_t) (int, void *)
+```
+
+第一个参数是要中断处理函数要相应的中断号。第二个参数是一个指向 void 的指针，也就 是个通用指针，需要与 request_irq 函数的 dev 参数保持一致。用于区分共享中断的不同设备， dev 也可以指向设备数据结构。中断处理函数的返回值为 irqreturn_t 类型，irqreturn_t 类型定义 如下所示：
+![image-20231016155503118](image\34.png)
+
+#### 中断使能与禁止函数
+
+![image-20231016155608360](image\35.png)
+
+enable_irq 和 disable_irq 用于使能和禁止指定的中断，irq 就是要禁止的中断号。disable_irq函数要等到当前正在执行的中断处理函数执行完才返回，因此使用者需要保证不会产生新的中 断，并且确保所有已经开始执行的中断处理程序已经全部退出。在这种情况下，可以使用另外 一个中断禁止函数：
+
+void disable_irq_nosync(unsigned int irq)
+
+disable_irq_nosync 函数调用以后立即返回，不会等待当前中断处理程序执行完毕。上面三 个函数都是使能或者禁止某一个中断，有时候我们需要关闭当前处理器的整个中断系统，也就 是在学习 STM32 的时候常说的关闭全局中断，这个时候可以使用如下两个函数：
+
+![image-20231016155712597](image\36.png)
+
+local_irq_enable 用于使能当前处理器中断系统，local_irq_disable 用于禁止当前处理器中断 系统。假如 A 任务调用 local_irq_disable 关闭全局中断 10S，当关闭了 2S 的时候 B 任务开始运 行，B 任务也调用 local_irq_disable 关闭全局中断 3S，3 秒以后 B 任务调用 local_irq_enable 函 数将全局中断打开了。此时才过去 2+3=5 秒的时间，然后全局中断就被打开了，此时 A 任务要 关闭 10S 全局中断的愿望就破灭了，然后 A 任务就“生气了”，结果很严重，可能系统都要被 A 任务整崩溃。为了解决这个问题，B 任务不能直接简单粗暴的通过 local_irq_enable 函数来打 开全局中断，而是将中断状态恢复到以前的状态，要考虑到别的任务的感受，此时就要用到下 面两个函数：
+
+![image-20231016155803362](image\37.png)
+
+#### 上半部与下半部
+
+在有些资料中也将上半部和下半部称为顶半部和底半部，都是一个意思。我们在使用 request_irq 申请中断的时候注册的中断服务函数属于中断处理的上半部，只要中断触发，那么 中断处理函数就会执行。我们都知道中断处理函数一定要快点执行完毕，越短越好，但是现实 往往是残酷的，有些中断处理过程就是比较费时间，我们必须要对其进行处理，缩小中断处理 函数的执行时间。比如电容触摸屏通过中断通知 SOC 有触摸事件发生，SOC 响应中断，然后 通过 IIC 接口读取触摸坐标值并将其上报给系统。但是我们都知道 IIC 的速度最高也只有 400Kbit/S，所以在中断中通过 IIC 读取数据就会浪费时间。我们可以将通过 IIC 读取触摸数据 的操作暂后执行，中断处理函数仅仅相应中断，然后清除中断标志位即可。这个时候中断处理 过程就分为了两部分：
+
+- **上半部：**上半部就是中断处理函数，那些处理过程比较快，不会占用很长时间的处理就可 以放在上半部完成。
+- **下半部：**如果中断处理过程比较耗时，那么就将这些比较耗时的代码提出来，交给下半部去执行，这样中断处理函数就会快进快出。
+
+因此，Linux 内核将中断分为上半部和下半部的主要目的就是实现中断处理函数的快进快 出，那些对时间敏感、执行速度快的操作可以放到中断处理函数中，也就是上半部。剩下的所 有工作都可以放到下半部去执行，比如在上半部将数据拷贝到内存中，关于数据的具体处理就 可以放到下半部去执行。至于哪些代码属于上半部，哪些代码属于下半部并没有明确的规定， 一切根据实际使用情况去判断，这个就很考验驱动编写人员的功底了。这里有一些可以借鉴的 参考点：
+
+1. 如果要处理的内容不希望被其他中断打断，那么可以放到上半部。
+2. 如果要处理的任务对时间敏感，可以放到上半部。
+3. 如果要处理的任务与硬件有关，可以放到上半部
+4. 除了上述三点以外的其他任务，优先考虑放到下半部。
+
+**Linux 内 核提供了多种下半部机制，接下来我们来学习一下这些下半部机制。**
+
+##### 软中断
+
+一开始 Linux 内核提供了“bottom half”机制来实现下半部，简称“BH”。后面引入了软中 断和 tasklet 来替代“BH”机制，完全可以使用软中断和 tasklet 来替代 BH，从 2.5 版本的 Linux 内核开始 BH 已经被抛弃了。Linux 内核使用结构体 softirq_action 表示软中断， softirq_action 结构体定义在文件 include/linux/interrupt.h 中
+
+```
+struct softirq_action
+{
+	void (*action)(struct softirq_action *);
+};
+```
+
+在 kernel/softirq.c 文件中一共定义了 10 个软中断：
+
+![image-20231016160152677](image\38.png)
+
+可以看出，一共有 10 个软中断，因此 NR_SOFTIRQS 为 10，因此数组 softirq_vec 有 10 个 元素。softirq_action 结构体中的 action 成员变量就是软中断的服务函数，数组 softirq_vec 是个 全局数组，因此所有的 CPU(对于 SMP 系统而言)都可以访问到，每个 CPU 都有自己的触发和 控制机制，并且只执行自己所触发的软中断。但是各个 CPU 所执行的软中断服务函数确是相同 的，都是数组 softirq_vec 中定义的 action 函数。**要使用软中断，必须先使用 open_softirq 函数注 册对应的软中断处理函数**，open_softirq 函数原型如下：
+void open_softirq(int nr, void (*action)(struct softirq_action *))
+
+**nr：**要开启的软中断，在示例代码 51.1.2.3 中选择一个。 
+**action：**软中断对应的处理函数。 
+**返回值：**没有返回值。
+
+注册好软中断以后需要通过 raise_softirq 函数触发，raise_softirq 函数原型如下：
+![image-20231016160356829](image\39.png)
+
+软中断必须在编译的时候静态注册！Linux 内核使用 softirq_init 函数初始化软中断， softirq_init 函数定义在 kernel/softirq.c 文件里面：
+
+![image-20231016160432218](image\40.png)
+
+##### tasklet
+
+tasklet 是利用软中断来实现的另外一种下半部机制，在软中断和 tasklet 之间，建议大家使 用 tasklet。Linux 内核使用 tasklet_struct 结构体来表示 tasklet：
+![image-20231016160535965](image\41.png)
+
+第 489 行的 func 函数就是 tasklet 要执行的处理函数，用户定义函数内容，相当于中断处理 函数。如果要使用 tasklet，必须先定义一个 tasklet，然后使用 **tasklet_init 函数初始化 tasklet**：
+
+```c
+void tasklet_init(struct tasklet_struct *t,
+				void (*func)(unsigned long), 
+					unsigned long data);
+```
+
+**t：**				要初始化的 tasklet
+**func：**		 tasklet 的处理函数。 
+**data：**		 要传递给 func 函数的参数 
+**返回值：**	   没有返回值。
+
+也可以使用**宏 DECLARE_TASKLET** 来一次性完成 tasklet 的定义和初始化， DECLARE_TASKLET 定义在 include/linux/interrupt.h 文件中，定义如下:
+
+![image-20231016160801107](image\42.png)
+
+在上半部，也就是中断处理函数中调用 tasklet_schedule 函数就能使 tasklet 在合适的时间运 行，tasklet_schedule 函数原型如下：
+![image-20231016160841399](image\43.png)
+
+##### 工作队列
+
+工作队列是另外一种下半部执行方式，工作队列在进程上下文执行，工作队列将要推后的 工作交给一个内核线程去执行，因为工作队列工作在进程上下文，因此工作队列允许睡眠或重 新调度。因此如果你要推后的工作可以睡眠那么就可以选择工作队列，否则的话就只能选择软 中断或 tasklet。
+
+Linux 内核使用 work_struct 结构体表示一个工作，内容如下(省略掉条件编译)：
+![image-20231016161037812](image\44.png)
+
+这些工作组织成工作队列，工作队列使用 workqueue_struct 结构体表示，内容如下(省略掉 条件编译)：
+![image-20231016161103810](image\45.png)
+
+Linux 内核使用工作者线程(worker thread)来处理工作队列中的各个工作，Linux 内核使用 worker 结构体表示工作者线程，worker 结构体内容如下：
+![image-20231016161130296](image\46.png)
+
+每个 worker 都有一个工作队列，工作者线程处理自己工 作队列中的所有工作。**在实际的驱动开发中，我们只需要定义工作(work_struct)即可**，关于工作 队列和工作者线程我们基本不用去管。
+简单创建工作很简单，直接定义一个 work_struct 结构体 变量即可，然后使用 INIT_WORK 宏来初始化工作，INIT_WORK 宏定义如下：
+**#define INIT_WORK(_work, _func)**
+_work 表示要初始化的工作，_func 是工作对应的处理函数。
+
+也可以使用 DECLARE_WORK 宏一次性完成工作的创建和初始化，宏定义如下：
+**\**#define DECLARE_WORK(n, f)****
+n 表示定义的工作(work_struct)，f 表示工作对应的处理函数。
+
+和 tasklet 一样，工作也是需要调度才能运行的，工作的调度函数为 schedule_work，函数原 型如下所示：
+![image-20231016162221061](image\47.png)
+
+
+
+#### 设备树中断信息节点
+
+如果使用设备树的话就需要在设备树中设置好中断属性信息，Linux 内核通过读取设备树 中 的 中断 属性 信息 来配 置中 断。 对于 中断 控制 器 而言 ，设 备树 绑定 信息 参考 文档 Documentation/devicetree/bindings/arm/gic.txt
+imx6ull.dtsi 文件中的 intc 节点就是 I.MX6ULL 的中断控制器节点
+![image-20231016165825403](image\48.png)
+
+第 2 行，compatible 属性值为“arm,cortex-a7-gic”在 Linux 内核源码中搜索“arm,cortex-a7- gic”即可找到 GIC 中断控制器驱动文件。
+第 3 行，#interrupt-cells 和#address-cells、#size-cells 一样。表示此中断控制器下设备的 cells 大小，对于设备而言，会使用 interrupts 属性描述中断信息，#interrupt-cells 描述了 interrupts 属性的 cells 大小，也就是一条信息有几个 cells。每个 cells 都是 32 位整形值，对于 ARM 处理的 GIC 来说，一共有 3 个 cells，这三个 cells 的含义如下：
+
+1. 第一个 cells：中断类型，0 表示 SPI 中断，1 表示 PPI 中断。
+2. 第二个 cells：中断号，对于 SPI 中断来说中断号的范围为 0~987，对于 PPI 中断来说中断 号的范围为 0~15。
+3. 第三个 cells：标志，bit[3:0]表示中断触发类型，为 1 的时候表示上升沿触发，为 2 的时候 表示下降沿触发，为 4 的时候表示高电平触发，为 8 的时候表示低电平触发。bit[15:8]为 PPI 中 断的 CPU 掩码。
+
+第 4 行，interrupt-controller 节点为空，表示当前节点是中断控制器。
+
+关于GPIO5的中断控制设备树相关描述见P1281
+
+简单总结一下与**中断有关的设备树属性信息**：
+
+- \#interrupt-cells，指定中断源的信息 cells 个数。
+- interrupt-controller，表示当前节点为中断控制器。
+- interrupts，指定中断号，触发方式等。
+- interrupt-parent，指定父中断，也就是中断控制器。
+
+##### 获取中断号
+
+编写驱动的时候需要用到中断号，我们用到中断号，中断信息已经写到了设备树里面，因 此可以通过 irq_of_parse_and_map 函数从 interupts 属性中提取到对应的设备号，函数原型如下：
+![image-20231016170112880](image\49.png)
+
+如果使用 GPIO 的话，可以使用 **gpio_to_irq** 函数来获取 gpio 对应的中断号，函数原型如 下：
+![image-20231016171529434](image\50.png)
