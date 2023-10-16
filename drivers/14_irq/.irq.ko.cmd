@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/14_irq/irq.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/14_irq/irq.ko /home/rodney/Desktop/Linux_driver/drivers/14_irq/irq.o /home/rodney/Desktop/Linux_driver/drivers/14_irq/irq.mod.o

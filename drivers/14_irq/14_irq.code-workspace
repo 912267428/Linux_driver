@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"module.h": "c",
+			"io.h": "c",
+			"fcntl.h": "c"
+		}
+	}
+}
