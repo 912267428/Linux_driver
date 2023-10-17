@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/14_irq/tasklet.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/14_irq/tasklet.ko /home/rodney/Desktop/Linux_driver/drivers/14_irq/tasklet.o /home/rodney/Desktop/Linux_driver/drivers/14_irq/tasklet.mod.o

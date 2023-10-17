@@ -20,7 +20,7 @@
 #include <asm/io.h>
 
 #define IRQ_CNT     1
-#define IRQ_NAME    "irq"
+#define IRQ_NAME    "tasklet"
 #define KEY0VALUE   0x01
 #define INVAKEY     0xFF
 #define KEY_NUM     1
@@ -32,6 +32,8 @@ struct irq_keydesc{
     unsigned char value; //按键对应的键值
     char name[10];
     irqreturn_t (*handler)(int, void *);    //中断服务函数
+
+    struct tasklet_struct tasklet;      //一个按键一个tasklet
 };
 
 struct irq_dev{
@@ -48,6 +50,7 @@ struct irq_dev{
     struct timer_list timer;
     struct irq_keydesc irqkeydesc[KEY_NUM];
     unsigned char curkeynum;
+
 };
 
 struct irq_dev irq;
@@ -57,10 +60,25 @@ static irqreturn_t key0_handler(int irq_num, void *dev_id)
 {
     struct irq_dev *dev = (struct irq_dev *)dev_id;
 
+    tasklet_schedule(&dev->irqkeydesc[0].tasklet);
+#if 0
     dev->curkeynum = 0;
     dev->timer.data = (volatile long)dev_id;
-    mod_timer(&dev->timer, jiffies + msecs_to_jiffies(10));
+    mod_timer(&dev->timer, jiffies + msecs_to_jiffies(20));
+#endif
+
     return IRQ_RETVAL(IRQ_HANDLED);
+}
+
+//tasklet func
+static void key_tasklet(unsigned long data)
+{
+    struct irq_dev *dev = (struct irq_dev *)data;
+
+    printk("key_tasklet\r\n");
+    dev->curkeynum = 0;
+    dev->timer.data = data;
+    mod_timer(&dev->timer, jiffies + msecs_to_jiffies(20));
 }
 
 //定时器服务函数，用于按键消抖
@@ -142,6 +160,7 @@ static int keyio_init(void)
             return -EFAULT;
         }
         
+        tasklet_init(&irq.irqkeydesc[i].tasklet, key_tasklet, (unsigned long)&irq);
     }
     
     //创建定时器
