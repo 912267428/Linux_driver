@@ -1154,3 +1154,97 @@ imx6ull.dtsi 文件中的 intc 节点就是 I.MX6ULL 的中断控制器节点
 
 如果使用 GPIO 的话，可以使用 **gpio_to_irq** 函数来获取 gpio 对应的中断号，函数原型如 下：
 ![image-20231016171529434](image\50.png)
+
+### 阻塞与非阻塞
+
+这里的 IO 指的是 Input/Output，也就是输入/输出，是应用程序对驱动设备的输入/输出操作。
+当 应用程序对设备驱动进行操作的时候，**如果不能获取到设备资源**，**那么阻塞式 IO 就会将应用程 序对应的线程挂起，直到设备资源可以获取为止**。
+**对于非阻塞 IO，应用程序对应的线程不会挂 起，它要么一直轮询等待**，直到设备资源可以使用，要么就**直接放弃**。
+
+#### 等待队列
+
+阻塞访问最大的好处就是当设备文件不可操作的时候进程可以进入休眠态，这样可以将 CPU 资源让出来。但是，当设备文件可以操作的时候就必须唤醒进程，一般在中断函数里面完成唤醒工作。
+Linux 内核提供了等待队列(wait queue)来实现阻塞进程的唤醒工作
+
+##### 等待队列头
+
+要 在驱动中使用等待队列，必须创建并初始化一个等待队列头，等待队列头使用结构体 wait_queue_head_t 表示，wait_queue_head_t 结构体定义在文件 include/linux/wait.h 中，结构体定义：
+
+```c
+struct __wait_queue_head {
+	spinlock_t lock;
+	struct list_head task_list;
+};
+typedef struct __wait_queue_head wait_queue_head_t;
+```
+
+定义好等待队列头以后需要初始化，使用 init_waitqueue_head 函数初始化等待队列头，函 数原型如下：
+
+**void init_waitqueue_head(wait_queue_head_t *q)**
+参数q即要初始化的等待队列头
+
+也可以使用宏 DECLARE_WAIT_QUEUE_HEAD 来一次性完成等待队列头的定义的初始 化。
+
+##### 等待队列项
+
+等待队列头就是一个等待队列的头部，每个访问设备的进程都是一个队列项，当设备不可 用的时候就要将这些进程对应的等待队列项添加到等待队列里面。结构体 wait_queue_t 表示等 待队列项，结构体内容如下：
+
+```c
+struct __wait_queue {
+ unsigned int flags;
+ void *private;
+ wait_queue_func_t func;
+ struct list_head task_list;
+};
+typedef struct __wait_queue wait_queue_t;
+```
+
+使用宏 DECLARE_WAITQUEUE 定义并初始化一个等待队列项，宏的内容如下：
+
+**DECLARE_WAITQUEUE(name, tsk)**
+
+name 就是等待队列项的名字，tsk 表示这个等待队列项属于哪个任务(进程)，一般设置为 current ， 在 Linux 内 核 中 current 相 当 于 一 个 全 局 变 量 ， 表 示 当 前 进 程 。 因 此 宏DECLARE_WAITQUEUE 就是**给当前正在运行的进程创建并初始化了一个等待队列项。**
+
+##### 将队列项添加/移除等待队列头
+
+当设备不可访问的时候就需要将进程对应的等待队列项添加到前面创建的等待队列头中， 只有添加到等待队列头中以后进程才能进入休眠态。当设备可以访问以后再将进程对应的等待 队列项从等待队列头中移除即可。
+**等待队列项添加** API 函数如下：
+
+![image-20231017162812194](D:\Program Files(x86)\Linux\Linux_driver\image\51.png)
+
+**等待队列项移除** API 函数如下：
+
+![image-20231017162921785](D:\Program Files(x86)\Linux\Linux_driver\image\52.png)
+
+##### 等待唤醒
+
+当设备可以使用的时候就要唤醒进入休眠态的进程，唤醒可以使用如下两个函数：
+
+```c
+void wake_up(wait_queue_head_t *q)
+void wake_up_interruptible(wait_queue_head_t *q)
+```
+
+参数 q 就是要唤醒的等待队列头，这两个函数会将这个等待队列头中的所有进程都唤醒。 wake_up 函数可以唤醒处于 TASK_INTERRUPTIBLE 和 TASK_UNINTERRUPTIBLE 状态的进 程，而 wake_up_interruptible 函数只能唤醒处于 TASK_INTERRUPTIBLE 状态的进程。
+
+##### 等待事件
+
+除了主动唤醒以外，也可以设置等待队列等待某个事件，当这个事件满足以后就自动唤醒 等待队列中的进程。相关函数：
+
+| 函数                                                      | 描述                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| wait_event(wq, condition)                                 | 等待以 wq 为等待队列头的等待队列被唤醒，前提是 condition 条件必须满足(为真)，否则一直阻塞。此函数会将进程设置为 TASK_UNINTERRUPTIBLE 状态 |
+| wait_event_timeout(wq, condition, timeout)                | 功能和 wait_event 类似，但是此函数可以添加超时时间，以 jiffies 为单位。此函数有返回值，如果返回 0 的话表示超时时间到，而且 condition 为假。为 1 的话表示 condition 为真，也就是条件满足了。 |
+| wait_event_interruptible(wq, condition)                   | 与 wait_event 函数类似，但是此函数将进程设置为 TASK_INTERRUPTIBLE，就是可以被信号打断。 |
+| wait_event_interruptible_timeout(wq,  condition, timeout) | 与 wait_event_timeout 函数类似，此函数也将进程设置为 TASK_INTERRUPTIBLE，可以被信号打断。 |
+
+##### 轮询
+
+如果用户应用程序以非阻塞的方式访问设备，设备驱动程序就要提供非阻塞的处理方式， 也就是轮询。**poll、epoll 和 select 可以用于处理轮询**，应用程序通过 **select、epoll 或 poll 函数**来查询设备是否可以操作，**如果可以操作的话就从设备读取或者向设备写入数**据。当应用程序调用 select、epoll 或 poll 函数的时候设备驱动程序中的poll函数就会执行，因此需要在设备驱动程序中编写 poll 函数。
+
+###### select 函数
+
+原型：
+
+![image-20231017165711766](D:\Program Files(x86)\Linux\Linux_driver\image\53.png)
+
