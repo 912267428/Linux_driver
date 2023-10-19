@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"module.h": "c",
+			"typeinfo": "c"
+		}
+	}
+}
