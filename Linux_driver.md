@@ -1248,3 +1248,32 @@ void wake_up_interruptible(wait_queue_head_t *q)
 
 ![image-20231017165711766](D:\Program Files(x86)\Linux\Linux_driver\image\53.png)
 
+比如我们现在要从一个设备文件中读取数据，那么就可以定义一个 fd_set 变量，这个变量 要传递给参数 readfds。当我们定义好一个 fd_set 变量以后可以使用如下所示几个宏进行操作：
+
+![image-20231019175357762](D:\Program Files(x86)\Linux\Linux_driver\image\54.png)
+
+**FD_ZERO** 用于将 fd_set 变量的所有位都清零，
+**FD_SET** 用于将 fd_set 变量的某个位置 1， 也就是向 fd_set 添加一个文件描述符，参数 fd 就是要加入的文件描述符。
+**FD_CLR** 用于将 fd_set变量的某个位清零，也就是将一个文件描述符从 fd_set 中删除，参数 fd 就是要删除的文件描述 符。
+**FD_ISSET** 用于测试一个文件是否属于某个集合，参数 fd 就是要判断的文件描述符。
+
+![image-20231019180021121](D:\Program Files(x86)\Linux\Linux_driver\image\55.png)
+
+###### poll函数
+
+在单个线程中，select 函数能够监视的文件描述符数量有最大的限制，一般为 1024，可以 修改内核将监视的文件描述符数量改大，但是这样会降低效率！这个时候就可以使用 poll 函数， poll 函数本质上和 select 没有太大的差别，但是 poll 函数没有最大文件描述符限制，Linux 应用 程序中 poll 函数原型如下所示：
+![image-20231019182509815](D:\Program Files(x86)\Linux\Linux_driver\image\56.png)
+
+###### epoll函数
+
+见P1302.
+
+##### Linux驱动下的poll操作函数
+
+**当应用程序调用 select 或 poll 函数来对驱动程序进行非阻塞访问的时候，驱动程序 file_operations 操作集中的 poll 函数就会执行。**
+
+所以驱动程序的编写者需要提供对应的 poll 函 数，poll 函数原型如下所示：
+![image-20231019183008693](D:\Program Files(x86)\Linux\Linux_driver\image\57.png)
+
+我们需要在驱动程序的 poll 函数中调用 poll_wait 函数，poll_wait 函数不会引起阻塞，只是 将应用程序添加到 poll_table 中，poll_wait 函数原型如下：
+![image-20231019183042802](D:\Program Files(x86)\Linux\Linux_driver\image\58.png)
