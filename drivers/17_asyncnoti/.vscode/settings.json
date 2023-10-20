@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "module.h": "c",
+        "select.h": "c",
+        "time.h": "c",
+        "fcntl.h": "c"
+    }
+}

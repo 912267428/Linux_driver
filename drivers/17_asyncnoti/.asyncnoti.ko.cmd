@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/17_asyncnoti/asyncnoti.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/17_asyncnoti/asyncnoti.ko /home/rodney/Desktop/Linux_driver/drivers/17_asyncnoti/asyncnoti.o /home/rodney/Desktop/Linux_driver/drivers/17_asyncnoti/asyncnoti.mod.o
