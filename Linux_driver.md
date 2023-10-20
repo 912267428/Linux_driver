@@ -1277,3 +1277,77 @@ void wake_up_interruptible(wait_queue_head_t *q)
 
 我们需要在驱动程序的 poll 函数中调用 poll_wait 函数，poll_wait 函数不会引起阻塞，只是 将应用程序添加到 poll_table 中，poll_wait 函数原型如下：
 ![image-20231019183042802](D:\Program Files(x86)\Linux\Linux_driver\image\58.png)
+
+### 异步通知
+
+#### 简介
+
+前文中的阻塞与非阻塞方式访问驱动设备，其中通过阻塞方式访问的话应用程序会处于休眠态，等待驱动设备可以使用；非阻塞方式的话会通过 poll 函数来不断的轮询，查看驱动设备文件是否可以使用。这两种方式都需要应用程序主动的去查询设备是否可以使用。而异步通知就是一种能够让驱动程序可以访问的时候主动告诉应用程序的机制。
+
+**“信号”**为此应运而生，信号类似于我们硬件上使用的“中断”，只不过信号是软件层次上 的。算是在软件层次上对中断的一种模拟，驱动可以通过主动向应用程序发送信号的方式来报 告自己可以访问了，应用程序获取到信号以后就可以从驱动设备中读取或者写入数据了。整个 过程就相当于应用程序收到了驱动发送过来了的一个中断，然后应用程序去响应这个中断，在 整个处理过程中应用程序并没有去查询驱动设备是否可以访问，一切都是由驱动设备自己告诉 给应用程序的。
+
+阻塞、非阻塞、异步通知，这三种是针对不同的场合提出来的不同的解决方法，**没有优劣之分**，在实际的工作和学习中，根据自己的实际需求选择合适的处理方法即可。
+
+异步通知的**核心就是信号**，在 arch/xtensa/include/uapi/asm/signal.h 文件中定义了 Linux 所支 持的所有信号：
+![image-20231020154859783](D:\Program Files(x86)\Linux\Linux_driver\image\59.png)![image-20231020154915165](D:\Program Files(x86)\Linux\Linux_driver\image\60.png)
+
+上述信号中除了 SIGKILL(9)和 SIGSTOP(19)这两个信号不能被忽略外，**其他的信号都可以忽略**。这些信号就相当于中断号，不同的中断号代表了不同的中断， 不同的中断所做的处理不同，因此，驱动程序可以通过向应用程序发送不同的信号来实现不同 的功能。
+
+使用中断的时候需要设置中断处理函数，同样的，如果要在应用程序中使用信号，那么就必须**设置信号所使用的信号处理函数**，在应用程序中**使用 signal 函数来设置**指定信号的处理函数，signal 函数原型如下所示：
+
+![image-20231020155158479](D:\Program Files(x86)\Linux\Linux_driver\image\61.png)
+
+信号处理函数的原型：
+
+typedef void (*sighandler_t)(int)
+
+#### 驱动中的信息处理
+
+##### 1、fasync_struct 结构体
+
+在驱动中使用信号需要在驱动程序中定义一个 fasync_struct 结构体指针变量，fasync_struct 结构体内 容如下：
+![image-20231020160811117](D:\Program Files(x86)\Linux\Linux_driver\image\62.png)
+
+一般将 fasync_struct 结构体指针变量**定义到设备结构体中**
+
+##### 2、fasync 函数
+
+如果要使用异步通知，需要在设备驱动中实现 file_operations 操作集中的 fasync 函数。函数原型：
+**int (*fasync) (int fd, struct file *filp, int on)**
+
+fasync 函数里面一般通过调用 **fasync_helper** 函数来初始化前面定义的 fasync_struct 结构体指针，原型：
+**int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fapp)**
+fasync_helper 函数的前三个参数就是 fasync 函数的那三个参数
+第四个参数就是**要初始化 的 fasync_struct 结构体指针变量**。
+
+当应用程序通过**“fcntl(fd, F_SETFL, flags | FASYNC)”**改变 fasync 标记的时候，驱动程序 file_operations 操作集中的 fasync 函数就会执行。
+
+在关闭驱动文件的时候需要在 file_operations 操作集中的 release 函数中释放 fasync_struct， **fasync_struct 的释放函数同样为 fasync_helper**
+
+##### 3、kill_fasync 函数
+
+当设备可以访问的时候，驱动程序需要向应用程序发出信号，相当于产生“中断”。kill_fasync 函数负责发送指定的信号。其函数原型如下：
+![image-20231020161514203](D:\Program Files(x86)\Linux\Linux_driver\image\63.png)
+
+#### 应用程序对异步通知的处理
+
+应用程序对异步通知的处理包括以下三步：
+
+1. ##### 注册信号处理函数
+
+   应用程序根据驱动程序所使用的信号来设置信号的处理函数，应用程序使用 signal 函数来 设置信号的处理函数。
+
+2. 将本应用程序的进程号告诉给内核
+
+   使用 **fcntl(fd, F_SETOWN, getpid())**将本应用程序的进程号告诉给内核。
+
+3. 开启异步通知
+
+   使用如下两行程序开启异步通知：
+
+   ```c
+   flags = fcntl(fd, F_GETFL); /* 获取当前的进程状态 */
+   fcntl(fd, F_SETFL, flags | FASYNC); /* 开启当前进程异步通知功能 */
+   ```
+
+   
