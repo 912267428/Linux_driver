@@ -1350,4 +1350,137 @@ fasync_helper 函数的前三个参数就是 fasync 函数的那三个参数
    fcntl(fd, F_SETFL, flags | FASYNC); /* 开启当前进程异步通知功能 */
    ```
 
-   
+
+### platform 设备驱动实验
+
+#### Linux 驱动的分离与分层
+
+对于 Linux 这样一个成熟、庞大、复杂的操作系统，代码的重用性非常重要，否则的话就会在 Linux 内核中存在大量无意义的重复代码。尤其是驱动程序，因为驱动程序占用了 Linux 内核代码量的大头，如果不对驱动程序加以管理，任由重复的代码肆意增加，那么用不了多久 Linux 内核的文件数量就庞大到无法接受的地步。
+
+##### 驱动的分隔与分离
+
+
+驱动的分隔，也就是将主机驱动和设备驱动分隔开来，比如 I2C、SPI 等等都会采用驱动分隔的方式来简化驱动的开发。
+
+在实际的驱动开发中，一般 I2C 主机控制器驱动已经由半导体厂家编写好了，而设备驱动一般也由设备器件的厂家编写好了，我们只需要提供设备信息即可，比如 I2C 设备的话提供设备连接到了哪个 I2C 接口上，I2C 的速度是多少等等。相当于将设备信息从设备驱动中剥离开来，驱动使用标准方法去获取到设备信息(比如从设备树中获取到设备信息)，然后根据获取到的设备信息来初始化设备。 这样就相当于驱动只负责驱动，设备只负责设备，想办法将两者进行匹配即可。这个就是 Linux 中的**总线(bus)、驱动(driver)和 设备(device)模型**，也就是常说的驱动分离。
+
+具体见开发指南54章
+
+。。。
+
+#### platform 平台驱动模型简介
+
+前面我们讲了设备驱动的分离，并且引出了总线(bus)、驱动(driver)和设备(device)模型，比 如 I2C、SPI、USB 等总线。但是在 SOC 中有些外设是没有总线这个概念的，但是又要使用总 线、驱动和设备模型该怎么办呢？为了解决此问题，**Linux 提出了 platform 这个虚拟总线**，相应 的就有 platform_driver 和 platform_device。
+
+##### platform 总线
+
+Linux系统内核使用bus_type 结构体表示总线，此结构体定义在文件 include/linux/device.h
+![image-20231023161147480](D:\Program Files(x86)\Linux\Linux_driver\image\64.png)![image-20231023161212911](D:\Program Files(x86)\Linux\Linux_driver\image\65.png)
+
+第 10 行，match 函数，此函数很重要，单词 match 的意思就是“匹配、相配”，因此**此函数就是完成设备和驱动之间匹配的**，总线就是使用 match 函数来根据注册的设备来查找对应的驱动，或者根据注册的驱动来查找相应的设备，因此**每一条总线都必须实现此函数**。match 函数有 两个参数：dev 和 drv，这**两个参数分别为 device 和 device_driver 类型，也就是设备和驱动。**
+
+platform 总线是 bus_type 的一个具体实例，定义在文件 drivers/base/platform.c，platform 总 线定义如下：
+
+![image-20231023161348957](D:\Program Files(x86)\Linux\Linux_driver\image\66.png)
+
+platform_bus_type 就是 platform 平台总线，其中 platform_match 就是匹配函数。
+platform_match 函数定义在文件 drivers/base/platform.c 中
+
+```c
+static int platform_match(struct device *dev, struct device_driver *drv)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct platform_driver *pdrv = to_platform_driver(drv);
+	
+	/*When driver_override is set,only bind to the matching driver*/
+	if (pdev->driver_override)
+	return !strcmp(pdev->driver_override, drv->name);
+	
+	/* Attempt an OF style match first */
+	if (of_driver_match_device(dev, drv))
+		return 1;
+	
+	/* Then try ACPI style match */
+	if (acpi_driver_match_device(dev, drv))
+		return 1;
+	
+	/* Then try to match against the id table */
+	if (pdrv->id_table)
+		return platform_match_id(pdrv->id_table, pdev) != NULL;
+	
+	/* fall-back to driver name match */
+	return (strcmp(pdev->name, drv->name) == 0);
+}
+```
+
+驱动和设备的匹配有四种方法:
+
+1. **OF 类型的匹配**，也就是设备树采用的匹配方式， of_driver_match_device 函数定义在文件 include/linux/of_device.h 中。device_driver 结构体(表示设备驱动)中有个名为of_match_table的成员变量，此成员变量保存着驱动的compatible匹配表， 设备树中的每个设备节点的 compatible 属性会和 of_match_table 表中的所有成员比较，查看是否有相同的条目，如果有的话就表示设备和此驱动匹配，设备和驱动匹配成功以后 **probe** 函数就会执行。
+2. **ACPI 匹配方式**。
+3. **id_table 匹配**，每个 platform_driver 结构体有一个 id_table 成员变量，顾名思义，保存了很多 id 信息。这些 id 信息存放着这个 platformd 驱动所支持的驱动类型。
+4. 如果第三种匹配方式的 id_table 不存在的话就直接比较驱动和 设备的 name 字段，看看是不是相等，如果相等的话就匹配成功。
+
+对于支持设备树的 Linux 版本号，一般设备驱动为了兼容性都支持设备树和无设备树两种 匹配方式。也就是第一种匹配方式一般都会存在，第三种和第四种只要存在一种就可以，一般 用的最多的还是第四种，也就是直接比较驱动和设备的 name 字段，毕竟这种方式最简单了。
+
+##### platform 驱动
+
+platform_driver 结构体表示 platform 驱动，此结构体定义在文件 include/linux/platform_device.h中：
+
+```c
+struct platform_driver {
+	int (*probe)(struct platform_device *);
+	int (*remove)(struct platform_device *);
+	void (*shutdown)(struct platform_device *);
+	int (*suspend)(struct platform_device *, pm_message_t state);
+	int (*resume)(struct platform_device *);
+	struct device_driver driver;
+	const struct platform_device_id *id_table;
+	bool prevent_deferred_probe;
+ };
+```
+
+**probe 函数**，当驱动与设备**匹配成功以后** probe 函数就会执行，**非常重要的函数一般驱动的提供者会编写，如果自己要编写一个全新的驱动，那么 probe 就需要自行实现。**
+
+**driver 成员**，为 device_driver 结构体变量，Linux 内核里面大量使用到了面向对象的思维，device_driver 相当于基类，提供了最基础的驱动框架。plaform_driver 继承了这个基类， 然后在此基础上又添加了一些特有的成员变量。
+
+**id_table 表**，也就是前面提到 platform 总线匹配驱动和设备的时候采用的第三种方法，id_table 是个表( 也就是数组) ，每个元素的类型为 platform_device_id，其结构体定义为：
+![image-20231023164135384](D:\Program Files(x86)\Linux\Linux_driver\image\67.png)
+
+device_driver 结构体定义在 include/linux/device.h：
+![image-20231023164215808](D:\Program Files(x86)\Linux\Linux_driver\image\68.png)
+
+第 10 行，of_match_table 就是采用设备树的时候驱动使用的匹配表，同样是数组，每个匹配项都为 of_device_id结构体类型，此结构体定义在文件 include/linux/mod_devicetable.h 中：
+![image-20231023164501818](D:\Program Files(x86)\Linux\Linux_driver\image\69.png)
+
+第 4 行的 compatible 非常重要，因为对于设备树而言，就是通过设备节点的 compatible 属 性值和 of_match_table 中每个项目的 compatible 成员变量进行比较，如果有相等的就表示设备 和此驱动匹配成功。
+
+在编写 platform 驱动的时候，首先定义一个 platform_driver 结构体变量，然后实现结构体 中的各个成员变量，重点是实现匹配方法以及 probe 函数。当驱动和设备匹配成功以后 probe 函数就会执行，具体的驱动程序在 probe 函数里面编写，比如字符设备驱动等等。
+
+当我们定义并初始化好 platform_driver 结构体变量以后，需要在驱动入口函数里面调用 platform_driver_register 函数向 Linux 内核注册一个 platform 驱动，platform_driver_register 函数 原型如下所示：
+
+![image-20231023164638679](D:\Program Files(x86)\Linux\Linux_driver\image\70.png)
+
+还需要在驱动卸载函数中通过 platform_driver_unregister 函数卸载 platform 驱动， platform_driver_unregister 函数原型如下：
+![image-20231023164752278](D:\Program Files(x86)\Linux\Linux_driver\image\71.png)
+
+##### platform 设备
+
+platform 驱动已经准备好了，我们还需要 platform 设备。platform_device 这个结构体表示 platform 设备。**注意**：如果内核支持设备树 的话就不要再使用 platform_device 来描述设备了，因为改用设备树去描述了。当然一定要用platform_device 来描述设备信息的话也是可以的。
+
+platform_device 结构体定义在文件 include/linux/platform_device.h 中：
+![image-20231023165552512](D:\Program Files(x86)\Linux\Linux_driver\image\72.png)
+
+第 23 行，name 表示设备名字，要和所使用的 platform 驱动的 name 字段相同，否则的话设 备就无法匹配到对应的驱动。
+
+第 27 行，num_resources 表示资源数量，一般为第 28 行 resource 资源的大小。
+
+第 28 行，resource 表示资源，也就是设备信息，比如外设寄存器等。Linux 内核使用 resource 结构体表示资源，resource 结构体内容如下：
+![image-20231023165743895](D:\Program Files(x86)\Linux\Linux_driver\image\73.png)
+start 和 end 分别表示资源的起始和终止信息，对于内存类的资源，就表示内存起始和终止 地址，name 表示资源名字，flags 表示资源类型，可选的资源类型都定义在了文件 include/linux/ioport.h 里面。
+
+在以前不支持设备树的Linux版本中，用户需要编写platform_device变量来描述设备信息， 然后使用 platform_device_register 函数将设备信息注册到 Linux 内核中，此函数原型如下所示：
+
+![image-20231023165848116](D:\Program Files(x86)\Linux\Linux_driver\image\74.png)
+
+如果不再使用 platform 的话可以通过 platform_device_unregister 函数注销掉相应的 platform 设备，platform_device_unregister 函数原型如下：
+![image-20231023165917432](D:\Program Files(x86)\Linux\Linux_driver\image\75.png)
