@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/18_platdorm/leddevice.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/18_platdorm/leddevice.ko /home/rodney/Desktop/Linux_driver/drivers/18_platdorm/leddevice.o /home/rodney/Desktop/Linux_driver/drivers/18_platdorm/leddevice.mod.o

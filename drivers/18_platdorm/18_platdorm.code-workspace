@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"fcntl.h": "c",
+			"fs.h": "c",
+			"platform_device.h": "c",
+			"poll.h": "c",
+			"sysctl.h": "c",
+			"module.h": "c",
+			"errno.h": "c"
+		}
+	}
+}
