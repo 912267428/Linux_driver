@@ -1457,7 +1457,6 @@ device_driver 结构体定义在 include/linux/device.h：
 在编写 platform 驱动的时候，首先定义一个 platform_driver 结构体变量，然后实现结构体 中的各个成员变量，重点是实现匹配方法以及 probe 函数。当驱动和设备匹配成功以后 probe 函数就会执行，具体的驱动程序在 probe 函数里面编写，比如字符设备驱动等等。
 
 当我们定义并初始化好 platform_driver 结构体变量以后，需要在驱动入口函数里面调用 platform_driver_register 函数向 Linux 内核注册一个 platform 驱动，platform_driver_register 函数 原型如下所示：
-
 ![image-20231023164638679](D:\Program Files(x86)\Linux\Linux_driver\image\70.png)
 
 还需要在驱动卸载函数中通过 platform_driver_unregister 函数卸载 platform 驱动， platform_driver_unregister 函数原型如下：
@@ -1484,3 +1483,43 @@ start 和 end 分别表示资源的起始和终止信息，对于内存类的资
 
 如果不再使用 platform 的话可以通过 platform_device_unregister 函数注销掉相应的 platform 设备，platform_device_unregister 函数原型如下：
 ![image-20231023165917432](D:\Program Files(x86)\Linux\Linux_driver\image\75.png)
+
+
+
+### Linux MISC驱动
+
+MISC 驱动其实就是最简单的字符设备驱 动，通常嵌套在 platform 总线驱动中，实现复杂的驱动
+
+所有的 MISC 设备驱动的主设备号都为 10，不同的设备使用不同的从设备号。随着 Linux 字符设备驱动的不断增加，设备号变得越来越紧张，尤其是主设备号，MISC 设备驱动就用于解 决此问题。MISC 设备会自动创建 cdev，不需要像我们以前那样手动创建，因此采用 MISC 设 备驱动可以简化字符设备驱动的编写
+需要向 Linux 注册一个 miscdevice 设备，miscdevice 是一个结构体，定义在文件 include/linux/miscdevice.h 中:
+
+```c
+struct miscdevice {
+	int minor; /* 子设备号 */
+	const char *name; /* 设备名字 */ 
+	const struct file_operations *fops; /* 设备操作集 */
+	struct list_head list;
+	struct device *parent;
+	struct device *this_device;
+	const struct attribute_group **groups;
+	const char *nodename;
+	umode_t mode;
+};
+```
+
+定义一个 MISC 设备(miscdevice 类型)以后需要设置 **minor、name 和 fops** 这三个成员变量。
+
+minor 表示子设备号，MISC 设备的主设备号为 10，这个是固定的，需要用户指定子设备号Linux 系统已经预定义了一些 MISC 设备的子设备号，这些预定义的子设备号定义在 include/linux/miscdevice.h 文件中:
+![image-20231029144104847](D:\Program Files(x86)\Linux\Linux_driver\image\76.png)
+
+使用的时候可以从这些预定义的子设备号中挑选一个，当然也可以自己定义，只要 这个子设备号没有被其他设备使用接口。
+name 就是此 MISC 设备名字，当此设备注册成功以后就会在/dev 目录下生成一个名为 name 的设备文件。
+fops 就是字符设备的操作集合，MISC 设备驱动最终是需要使用用户提供的 fops 操作集合。
+
+当设置好 miscdevice 以后就需要使用 misc_register 函数向系统中注册一个 MISC 设备，此函数原型如下：
+![image-20231029144148945](D:\Program Files(x86)\Linux\Linux_driver\image\77.png)
+
+以前我们需要自己调用一堆的函数去创建设备,现在我们可以直接使用 misc_register 一个函数来完成.
+卸载设备驱动模块的时候需要调用 misc_deregister 函数来注销掉 MISC 设备，函数原型如下：
+![image-20231029144241407](D:\Program Files(x86)\Linux\Linux_driver\image\78.png)
+同理，我们在注销设备驱动的时候也可以使用这函数来代替以前的一系列函数。
