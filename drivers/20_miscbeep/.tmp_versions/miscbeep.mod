@@ -1,0 +1,2 @@
+/home/rodney/Desktop/Linux_driver/drivers/20_miscbeep/miscbeep.ko
+/home/rodney/Desktop/Linux_driver/drivers/20_miscbeep/miscbeep.o
