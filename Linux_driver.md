@@ -1210,11 +1210,11 @@ name 就是等待队列项的名字，tsk 表示这个等待队列项属于哪�
 当设备不可访问的时候就需要将进程对应的等待队列项添加到前面创建的等待队列头中， 只有添加到等待队列头中以后进程才能进入休眠态。当设备可以访问以后再将进程对应的等待 队列项从等待队列头中移除即可。
 **等待队列项添加** API 函数如下：
 
-![image-20231017162812194](D:\Program Files(x86)\Linux\Linux_driver\image\51.png)
+![image-20231017162812194](image\51.png)
 
 **等待队列项移除** API 函数如下：
 
-![image-20231017162921785](D:\Program Files(x86)\Linux\Linux_driver\image\52.png)
+![image-20231017162921785](image\52.png)
 
 ##### 等待唤醒
 
@@ -1246,23 +1246,23 @@ void wake_up_interruptible(wait_queue_head_t *q)
 
 原型：
 
-![image-20231017165711766](D:\Program Files(x86)\Linux\Linux_driver\image\53.png)
+![image-20231017165711766](image\53.png)
 
 比如我们现在要从一个设备文件中读取数据，那么就可以定义一个 fd_set 变量，这个变量 要传递给参数 readfds。当我们定义好一个 fd_set 变量以后可以使用如下所示几个宏进行操作：
 
-![image-20231019175357762](D:\Program Files(x86)\Linux\Linux_driver\image\54.png)
+![image-20231019175357762](image\54.png)
 
 **FD_ZERO** 用于将 fd_set 变量的所有位都清零，
 **FD_SET** 用于将 fd_set 变量的某个位置 1， 也就是向 fd_set 添加一个文件描述符，参数 fd 就是要加入的文件描述符。
 **FD_CLR** 用于将 fd_set变量的某个位清零，也就是将一个文件描述符从 fd_set 中删除，参数 fd 就是要删除的文件描述 符。
 **FD_ISSET** 用于测试一个文件是否属于某个集合，参数 fd 就是要判断的文件描述符。
 
-![image-20231019180021121](D:\Program Files(x86)\Linux\Linux_driver\image\55.png)
+![image-20231019180021121](image\55.png)
 
 ###### poll函数
 
 在单个线程中，select 函数能够监视的文件描述符数量有最大的限制，一般为 1024，可以 修改内核将监视的文件描述符数量改大，但是这样会降低效率！这个时候就可以使用 poll 函数， poll 函数本质上和 select 没有太大的差别，但是 poll 函数没有最大文件描述符限制，Linux 应用 程序中 poll 函数原型如下所示：
-![image-20231019182509815](D:\Program Files(x86)\Linux\Linux_driver\image\56.png)
+![image-20231019182509815](image\56.png)
 
 ###### epoll函数
 
@@ -1273,10 +1273,10 @@ void wake_up_interruptible(wait_queue_head_t *q)
 **当应用程序调用 select 或 poll 函数来对驱动程序进行非阻塞访问的时候，驱动程序 file_operations 操作集中的 poll 函数就会执行。**
 
 所以驱动程序的编写者需要提供对应的 poll 函 数，poll 函数原型如下所示：
-![image-20231019183008693](D:\Program Files(x86)\Linux\Linux_driver\image\57.png)
+![image-20231019183008693](image\57.png)
 
 我们需要在驱动程序的 poll 函数中调用 poll_wait 函数，poll_wait 函数不会引起阻塞，只是 将应用程序添加到 poll_table 中，poll_wait 函数原型如下：
-![image-20231019183042802](D:\Program Files(x86)\Linux\Linux_driver\image\58.png)
+![image-20231019183042802](image\58.png)
 
 ### 异步通知
 
@@ -1289,13 +1289,13 @@ void wake_up_interruptible(wait_queue_head_t *q)
 阻塞、非阻塞、异步通知，这三种是针对不同的场合提出来的不同的解决方法，**没有优劣之分**，在实际的工作和学习中，根据自己的实际需求选择合适的处理方法即可。
 
 异步通知的**核心就是信号**，在 arch/xtensa/include/uapi/asm/signal.h 文件中定义了 Linux 所支 持的所有信号：
-![image-20231020154859783](D:\Program Files(x86)\Linux\Linux_driver\image\59.png)![image-20231020154915165](D:\Program Files(x86)\Linux\Linux_driver\image\60.png)
+![image-20231020154859783](image\59.png)![image-20231020154915165](image\60.png)
 
 上述信号中除了 SIGKILL(9)和 SIGSTOP(19)这两个信号不能被忽略外，**其他的信号都可以忽略**。这些信号就相当于中断号，不同的中断号代表了不同的中断， 不同的中断所做的处理不同，因此，驱动程序可以通过向应用程序发送不同的信号来实现不同 的功能。
 
 使用中断的时候需要设置中断处理函数，同样的，如果要在应用程序中使用信号，那么就必须**设置信号所使用的信号处理函数**，在应用程序中**使用 signal 函数来设置**指定信号的处理函数，signal 函数原型如下所示：
 
-![image-20231020155158479](D:\Program Files(x86)\Linux\Linux_driver\image\61.png)
+![image-20231020155158479](image\61.png)
 
 信号处理函数的原型：
 
@@ -1306,7 +1306,7 @@ typedef void (*sighandler_t)(int)
 ##### 1、fasync_struct 结构体
 
 在驱动中使用信号需要在驱动程序中定义一个 fasync_struct 结构体指针变量，fasync_struct 结构体内 容如下：
-![image-20231020160811117](D:\Program Files(x86)\Linux\Linux_driver\image\62.png)
+![image-20231020160811117](image\62.png)
 
 一般将 fasync_struct 结构体指针变量**定义到设备结构体中**
 
@@ -1327,7 +1327,7 @@ fasync_helper 函数的前三个参数就是 fasync 函数的那三个参数
 ##### 3、kill_fasync 函数
 
 当设备可以访问的时候，驱动程序需要向应用程序发出信号，相当于产生“中断”。kill_fasync 函数负责发送指定的信号。其函数原型如下：
-![image-20231020161514203](D:\Program Files(x86)\Linux\Linux_driver\image\63.png)
+![image-20231020161514203](image\63.png)
 
 #### 应用程序对异步通知的处理
 
@@ -1375,13 +1375,13 @@ fasync_helper 函数的前三个参数就是 fasync 函数的那三个参数
 ##### platform 总线
 
 Linux系统内核使用bus_type 结构体表示总线，此结构体定义在文件 include/linux/device.h
-![image-20231023161147480](D:\Program Files(x86)\Linux\Linux_driver\image\64.png)![image-20231023161212911](D:\Program Files(x86)\Linux\Linux_driver\image\65.png)
+![image-20231023161147480](image\64.png)![image-20231023161212911](image\65.png)
 
 第 10 行，match 函数，此函数很重要，单词 match 的意思就是“匹配、相配”，因此**此函数就是完成设备和驱动之间匹配的**，总线就是使用 match 函数来根据注册的设备来查找对应的驱动，或者根据注册的驱动来查找相应的设备，因此**每一条总线都必须实现此函数**。match 函数有 两个参数：dev 和 drv，这**两个参数分别为 device 和 device_driver 类型，也就是设备和驱动。**
 
 platform 总线是 bus_type 的一个具体实例，定义在文件 drivers/base/platform.c，platform 总 线定义如下：
 
-![image-20231023161348957](D:\Program Files(x86)\Linux\Linux_driver\image\66.png)
+![image-20231023161348957](image\66.png)
 
 platform_bus_type 就是 platform 平台总线，其中 platform_match 就是匹配函数。
 platform_match 函数定义在文件 drivers/base/platform.c 中
@@ -1444,45 +1444,45 @@ struct platform_driver {
 **driver 成员**，为 device_driver 结构体变量，Linux 内核里面大量使用到了面向对象的思维，device_driver 相当于基类，提供了最基础的驱动框架。plaform_driver 继承了这个基类， 然后在此基础上又添加了一些特有的成员变量。
 
 **id_table 表**，也就是前面提到 platform 总线匹配驱动和设备的时候采用的第三种方法，id_table 是个表( 也就是数组) ，每个元素的类型为 platform_device_id，其结构体定义为：
-![image-20231023164135384](D:\Program Files(x86)\Linux\Linux_driver\image\67.png)
+![image-20231023164135384](image\67.png)
 
 device_driver 结构体定义在 include/linux/device.h：
-![image-20231023164215808](D:\Program Files(x86)\Linux\Linux_driver\image\68.png)
+![image-20231023164215808](image\68.png)
 
 第 10 行，of_match_table 就是采用设备树的时候驱动使用的匹配表，同样是数组，每个匹配项都为 of_device_id结构体类型，此结构体定义在文件 include/linux/mod_devicetable.h 中：
-![image-20231023164501818](D:\Program Files(x86)\Linux\Linux_driver\image\69.png)
+![image-20231023164501818](image\69.png)
 
 第 4 行的 compatible 非常重要，因为对于设备树而言，就是通过设备节点的 compatible 属 性值和 of_match_table 中每个项目的 compatible 成员变量进行比较，如果有相等的就表示设备 和此驱动匹配成功。
 
 在编写 platform 驱动的时候，首先定义一个 platform_driver 结构体变量，然后实现结构体 中的各个成员变量，重点是实现匹配方法以及 probe 函数。当驱动和设备匹配成功以后 probe 函数就会执行，具体的驱动程序在 probe 函数里面编写，比如字符设备驱动等等。
 
 当我们定义并初始化好 platform_driver 结构体变量以后，需要在驱动入口函数里面调用 platform_driver_register 函数向 Linux 内核注册一个 platform 驱动，platform_driver_register 函数 原型如下所示：
-![image-20231023164638679](D:\Program Files(x86)\Linux\Linux_driver\image\70.png)
+![image-20231023164638679](image\70.png)
 
 还需要在驱动卸载函数中通过 platform_driver_unregister 函数卸载 platform 驱动， platform_driver_unregister 函数原型如下：
-![image-20231023164752278](D:\Program Files(x86)\Linux\Linux_driver\image\71.png)
+![image-20231023164752278](image\71.png)
 
 ##### platform 设备
 
 platform 驱动已经准备好了，我们还需要 platform 设备。platform_device 这个结构体表示 platform 设备。**注意**：如果内核支持设备树 的话就不要再使用 platform_device 来描述设备了，因为改用设备树去描述了。当然一定要用platform_device 来描述设备信息的话也是可以的。
 
 platform_device 结构体定义在文件 include/linux/platform_device.h 中：
-![image-20231023165552512](D:\Program Files(x86)\Linux\Linux_driver\image\72.png)
+![image-20231023165552512](image\72.png)
 
 第 23 行，name 表示设备名字，要和所使用的 platform 驱动的 name 字段相同，否则的话设 备就无法匹配到对应的驱动。
 
 第 27 行，num_resources 表示资源数量，一般为第 28 行 resource 资源的大小。
 
 第 28 行，resource 表示资源，也就是设备信息，比如外设寄存器等。Linux 内核使用 resource 结构体表示资源，resource 结构体内容如下：
-![image-20231023165743895](D:\Program Files(x86)\Linux\Linux_driver\image\73.png)
+![image-20231023165743895](image\73.png)
 start 和 end 分别表示资源的起始和终止信息，对于内存类的资源，就表示内存起始和终止 地址，name 表示资源名字，flags 表示资源类型，可选的资源类型都定义在了文件 include/linux/ioport.h 里面。
 
 在以前不支持设备树的Linux版本中，用户需要编写platform_device变量来描述设备信息， 然后使用 platform_device_register 函数将设备信息注册到 Linux 内核中，此函数原型如下所示：
 
-![image-20231023165848116](D:\Program Files(x86)\Linux\Linux_driver\image\74.png)
+![image-20231023165848116](image\74.png)
 
 如果不再使用 platform 的话可以通过 platform_device_unregister 函数注销掉相应的 platform 设备，platform_device_unregister 函数原型如下：
-![image-20231023165917432](D:\Program Files(x86)\Linux\Linux_driver\image\75.png)
+![image-20231023165917432](image\75.png)
 
 
 
@@ -1510,16 +1510,748 @@ struct miscdevice {
 定义一个 MISC 设备(miscdevice 类型)以后需要设置 **minor、name 和 fops** 这三个成员变量。
 
 minor 表示子设备号，MISC 设备的主设备号为 10，这个是固定的，需要用户指定子设备号Linux 系统已经预定义了一些 MISC 设备的子设备号，这些预定义的子设备号定义在 include/linux/miscdevice.h 文件中:
-![image-20231029144104847](D:\Program Files(x86)\Linux\Linux_driver\image\76.png)
+![image-20231029144104847](image\76.png)
 
 使用的时候可以从这些预定义的子设备号中挑选一个，当然也可以自己定义，只要 这个子设备号没有被其他设备使用接口。
 name 就是此 MISC 设备名字，当此设备注册成功以后就会在/dev 目录下生成一个名为 name 的设备文件。
 fops 就是字符设备的操作集合，MISC 设备驱动最终是需要使用用户提供的 fops 操作集合。
 
 当设置好 miscdevice 以后就需要使用 misc_register 函数向系统中注册一个 MISC 设备，此函数原型如下：
-![image-20231029144148945](D:\Program Files(x86)\Linux\Linux_driver\image\77.png)
+![image-20231029144148945](image\77.png)
 
 以前我们需要自己调用一堆的函数去创建设备,现在我们可以直接使用 misc_register 一个函数来完成.
 卸载设备驱动模块的时候需要调用 misc_deregister 函数来注销掉 MISC 设备，函数原型如下：
-![image-20231029144241407](D:\Program Files(x86)\Linux\Linux_driver\image\78.png)
+![image-20231029144241407](image\78.png)
 同理，我们在注销设备驱动的时候也可以使用这函数来代替以前的一系列函数。
+
+### Linux INPUT子系统
+
+按键、鼠标、键盘、触摸屏等都属于输入(input)设备，Linux 内核为此专门做了一个叫做 input 子系统的框架来处理输入事件。
+输入设备本质上还是字符设备，只是在此基础上套上了input框架，用户只需要负责上报输入事件，比如按键值、坐标等信息，input 核心层负责处理这些事件。
+
+不同的输入设备所代表的含义不同，按键和键盘就是代表按键信息， 鼠标和触摸屏代表坐标信息，因此在应用层的处理就不同，对于驱动编写者而言不需要去关心 应用层的事情，我们只需要按照要求上报这些输入事件即可。为此 input 子系统分为 input 驱动 层、input 核心层、input 事件处理层，最终给用户空间提供可访问的设备节点。
+
+![image-20231030103338115](image\79.png)
+
+我 们编写驱动程序的时候只需要关注中间的驱动层、核心层和事件层，这三个层的分工如下：
+
+**驱动层**：输入设备的具体驱动程序，比如按键驱动程序，向内核层报告输入内容。
+
+**核心层**：承上启下，为驱动层提供输入设备注册和操作接口。通知事件层对输入事件进行 处理。
+
+**事件层**：主要和用户空间进行交互。
+
+#### input 驱动编写流程
+
+input 核心层会向 Linux 内核注册一个字符设备，drivers/input/input.c 这个文件， input.c 就是 input 输入子系统的核心层，此文件里面有如下所示代码：
+
+```c
+1767 struct class input_class = {
+1768 	.name = "input",
+1769 	.devnode = input_devnode,
+1770 };
+......
+2414 static int __init input_init(void)
+2415 {
+2416 	int err;
+2417	
+2418 	err = class_register(&input_class);
+2419 	if (err) {
+2420 		pr_err("unable to register input_dev class\n");
+2421 		return err;
+2422 	}
+2423	
+2424 	err = input_proc_init();
+2425 	if (err)
+2426 		goto fail1;
+2427	
+2428 	err = register_chrdev_region(MKDEV(INPUT_MAJOR, 0),
+2429 					INPUT_MAX_CHAR_DEVICES, "input");
+2430 	if (err) {
+2431 		pr_err("unable to register char major %d", INPUT_MAJOR);
+2432 		goto fail2;
+2433 	}
+2434	
+2435 	return 0;
+2436	
+2437 fail2: input_proc_exit();
+2438 fail1: class_unregister(&input_class);
+2439 	return err;
+2440 }
+```
+
+第 2418 行，注册一个 input 类，这样系统启动以后就会在/sys/class 目录下有一个 input 子 目录
+
+第 2428~2429 行，注册一个字符设备，主设备号为 INPUT_MAJOR，INPUT_MAJOR 定义 在 include/uapi/linux/major.h 文件中:
+	\#define INPUT_MAJOR 13
+因此，input 子系统的所有设备主设备号都为 13，在使用 input 子系统处理输入设备的时候就不需要去注册字符设备了，我们只需要向系统注册一个 input_device 即可。
+
+##### 1、注册 input_dev
+
+在使用 input 子系统的时候只需要注册一个 input 设备即可，input_dev 结构体表示 input 设备，此结构体定义在 include/linux/input.h 文件中：
+
+```c
+121 struct input_dev {
+122 	const char *name;
+123 	const char *phys;
+124 	const char *uniq;
+125 	struct input_id id;
+126	
+127 	unsigned long propbit[BITS_TO_LONGS(INPUT_PROP_CNT)];
+128	
+129 	unsigned long evbit[BITS_TO_LONGS(EV_CNT)]; /* 事件类型的位图 */
+130 	unsigned long keybit[BITS_TO_LONGS(KEY_CNT)]; /* 按键值的位图 */
+131 	unsigned long relbit[BITS_TO_LONGS(REL_CNT)]; /* 相对坐标的位图 */ 
+132 	unsigned long absbit[BITS_TO_LONGS(ABS_CNT)]; /* 绝对坐标的位图 */
+133 	unsigned long mscbit[BITS_TO_LONGS(MSC_CNT)]; /* 杂项事件的位图 */
+134 	unsigned long ledbit[BITS_TO_LONGS(LED_CNT)]; /*LED 相关的位图 */
+135 	unsigned long sndbit[BITS_TO_LONGS(SND_CNT)];/* sound 有关的位图*/
+136 	unsigned long ffbit[BITS_TO_LONGS(FF_CNT)]; /* 压力反馈的位图 */
+137 	unsigned long swbit[BITS_TO_LONGS(SW_CNT)]; /*开关状态的位图 */
+......
+189 	bool devres_managed;
+190 };
+```
+
+第 129 行，evbit 表示输入事件类型，可选的事件类型定义在 include/uapi/linux/input.h 文件 中，事件类型如下：
+
+```c
+#define EV_SYN 0x00 		/* 同步事件 */
+#define EV_KEY 0x01 		/* 按键事件 */
+#define EV_REL 0x02 		/* 相对坐标事件 */
+#define EV_ABS 0x03 		/* 绝对坐标事件 */
+#define EV_MSC 0x04 		/* 杂项(其他)事件 */
+#define EV_SW 0x05  		/* 开关事件 */
+#define EV_LED 0x11 		/* LED */
+#define EV_SND 0x12 		/* sound(声音) */
+#define EV_REP 0x14 		/* 重复事件 */
+#define EV_FF 0x15  		/* 压力事件 */
+#define EV_PWR 0x16 		/* 电源事件 */
+#define EV_FF_STATUS 0x17   /* 压力状态事件 */
+
+```
+
+例如下面马上使用到的按键，就需要注册EV_KEY事件，如果要使用连按功能还需要注册EV_REP 事件。
+
+第 129 行~137 行的 evbit、keybit、relbit 等等都是存放不同事件对应的值。比如要使用按键事件，因此要用到 keybit，keybit 就是按键事件使用的位图，Linux 内核定义了很多按键值，这些按键值定义在 include/uapi/linux/input.h 文件中，按键值如下：
+
+```c
+#define KEY_RESERVED 0
+#define KEY_ESC 1
+#define KEY_1 2
+#define KEY_2 3
+#define KEY_3 4
+#define KEY_4 5
+#define KEY_5 6
+#define KEY_6 7
+#define KEY_7 8
+#define KEY_8 9
+#define KEY_9 10
+#define KEY_0 11
+......
+#define BTN_TRIGGER_HAPPY39 0x2e6
+#define BTN_TRIGGER_HAPPY40 0x2e7
+```
+
+可以将开发板上的按键值设置为上面的任意一个，比如等会将开发板上的KEY设置为KEY_0。
+
+在编写 input 设备驱动的时候我们需要先申请一个 input_dev 结构体变量，使用 input_allocate_device 函数来**申请**一个 input_dev，此函数原型如下所示：
+![image-20231030105201841](D:\Program Files(x86)\Linux\Linux_driver\image\80.png)
+
+要注销的 input 设备的话需要使用 input_free_device 函数来释放掉前面申请到的 input_dev，input_free_device 函数原型如下：
+![image-20231030105321368](D:\Program Files(x86)\Linux\Linux_driver\image\81.png)
+
+申请好一个 input_dev 以后就需要**初始化**这个 input_dev，需要初始化的内容主要为事件类 型(evbit)和事件值(keybit)这两种。
+
+input_dev 初始化完成以后就需要**向 Linux 内核注册 input_dev** 了，需要用到 input_register_device 函数，此函数原型如下：
+
+![image-20231030105852731](D:\Program Files(x86)\Linux\Linux_driver\image\82.png)
+
+同样的，注销 input 驱动的时候也需要使用 input_unregister_device 函数来注销掉前面注册 的 input_dev，input_unregister_device 函数原型如下：
+![image-20231030105920769](D:\Program Files(x86)\Linux\Linux_driver\image\83.png)
+
+##### 2、上报输入事件
+
+向 Linux 内核注册好 input_dev 以后还不能高枕无忧的使用 input 设备，input 设备都 是具有输入功能的，但是具体是什么样的输入值 Linux 内核是不知道的，我们需要获取到具体 的输入值，或者说是输入事件，然后将输入事件上报给 Linux 内核。比如按键，我们需要在按 键中断处理函数，或者消抖定时器中断函数中将按键值上报给 Linux 内核，这样 Linux 内核才 能获取到正确的输入值。不同的事件，其上报事件的 API 函数不同，我们依次来看一下一些常 用的事件上报 API 函数。
+
+首先是 input_event 函数，此函数用于上报指定的事件以及对应的值，函数原型如下：
+![image-20231030110321473](D:\Program Files(x86)\Linux\Linux_driver\image\84.png)
+
+input_event 函数可以上报所有的事件类型和事件值，Linux 内核也提供了其他的针对具体 事件的上报函数，这些函数其实都用到了 input_event 函数。
+
+比如上报按键所使用的 input_report_key 函数：
+![image-20231030110430810](D:\Program Files(x86)\Linux\Linux_driver\image\85.png)
+
+同样的还有一些其他的事件上报函数，这些函数如下所示：
+
+```c
+void input_report_rel(struct input_dev *dev, unsigned int code, int value)
+void input_report_abs(struct input_dev *dev, unsigned int code, int value)
+void input_report_ff_status(struct input_dev *dev, unsigned int code, int value)
+void input_report_switch(struct input_dev *dev, unsigned int code, int value)
+void input_mt_sync(struct input_dev *dev)
+```
+
+当我们上报事件以后还需要**使用 input_sync 函数来告诉 Linux 内核 input 子系统上报结束**， input_sync 函数本质是上报一个同步事件，此函数原型如下所示：
+
+![image-20231030110540253](D:\Program Files(x86)\Linux\Linux_driver\image\86.png)
+
+#### input_event 结构体
+
+Linux 内核使用 input_event 这个结构体来表示所有的输入事件，input_envent 结构体定义在 include/uapi/linux/input.h 文件中
+
+```c
+struct input_event {
+	struct timeval time;
+	__u16 type;
+	__u16 code;
+	__s32 value;
+};
+```
+
+input_event 结构体中的各个成员变量:
+
+1. time：时间，也就是此事件发生的时间，为 timeval 结构体类型
+
+   timeval 结构体定义如下：
+   ![image-20231030110813861](D:\Program Files(x86)\Linux\Linux_driver\image\87.png)
+   tv_sec 和 tv_usec 这两个成员变量都为 long 类型，也就是 **32 位**，这个一定要记住
+
+2. type：事件类型.比如 EV_KEY，表示此次事件为按键事件，此成员变量为 **16 位**。
+
+3. code：事件码.比如在 EV_KEY 事件中 code 就表示具体的按键码，如：KEY_0、KEY_1 等等这些按键。此成员变量为 **16 位**。
+
+4. value：值.比如 EV_KEY 事件中 value 就是按键值，表示按键有没有被按下，如果为 1 的 话说明按键按下，如果为 0 的话说明按键没有被按下或者按键松开了。
+
+input_envent 这个结构体非常重要，因为所有的输入设备最终都是按照 input_event 结构体 呈现给用户的，用户应用程序可以通过 input_event 来获取到具体的输入事件或相关的值，比如 按键值等。
+
+### Linux下LCD驱动
+
+#### Framebuffer 设备
+
+##### 裸机下LCD驱动的编写
+
+1. 初始化 I.MX6U 的 eLCDIF 控制器，重点是 LCD 屏幕宽(width)、高(height)、hspw、
+   hbp、hfp、vspw、vbp 和 vfp 等信息。
+2. 初始化 LCD 像素时钟。
+3. 设置 RGBLCD 显存。
+4. 应用程序直接通过操作显存来操作 LCD，实现在 LCD 上显示字符、图片等信息。
+
+在 Linux 中应用程序最终也是通过操作 RGB LCD 的显存来实现在 LCD 上显示字符、图片 等信息。在裸机中我们可以随意的分配显存，但是在 Linux 系统中内存的管理很严格，显存是 **需要申**请的，而且因为虚拟内存的存在，驱动程序设置的显存和应用程 序访问的显存要是同一片物理内存。
+
+**Framebuffer**就是为了解决上面的问题，帧缓冲，简称fb。
+
+fb 是一种机制，将系统中所有跟显示有关的硬件以及软件集合起来，虚拟出一 个 fb 设备，当我们编写好 LCD 驱动以后会生成一个名为/dev/fbX(X=0~n)的设备。
+
+应用程序通 过访问/dev/fbX 这个设备就可以访问 LCD。NXP 官方的 Linux 内核默认已经开启了 LCD 驱动， 因此我们是可以看到/dev/fb0 这样一个设备。/dev/fb0 是个字符设备，因此肯定有 file_operations 操作集，fb 的 file_operations 操作集定义在 drivers/video/fbdev/core/fbmem.c 文件中：
+
+```c
+static const struct file_operations fb_fops = {
+	.owner = THIS_MODULE,
+	.read = fb_read,
+	.write = fb_write,
+	.unlocked_ioctl = fb_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = fb_compat_ioctl,
+#endif
+	.mmap = fb_mmap,
+	.open = fb_open,
+	.release = fb_release,
+#ifdef HAVE_ARCH_FB_UNMAPPED_AREA
+	.get_unmapped_area = get_fb_unmapped_area,
+#endif
+#ifdef CONFIG_FB_DEFERRED_IO
+	.fsync = fb_deferred_io_fsync,
+#endif
+	.llseek = default_llseek,
+};
+```
+
+#### LCD驱动简析
+
+LCD 裸机例程主要分两部分：
+
+1. 获取 LCD 的屏幕参数。
+2. 根据屏幕参数信息来初始化 eLCDIF 接口控制器。
+
+不同分辨率的 LCD 屏幕其 eLCDIF 控制器驱动代码都是一样的，只需要修改好对应的屏 幕参数即可。屏幕参数信息属于屏幕设备信息内容，这些肯定是要放到设备树中的，因此我们本实验的主要工作就是修改设备数。
+
+NXP 官方的设备树已经添加了 LCD 设备节点，只是此 节点的 LCD 屏幕信息是针对 NXP 官方 EVK 开发板所使用的 4.3 寸 480*272 编写的，我们需 要将其改为我们所使用的屏幕参数。
+
+看一下 NXP 官方编写的 Linux 下的 LCD 驱动，打开 imx6ull.dtsi，然后找到 lcdif 节点内容，如下所示：
+![image-20231031105921524](D:\Program Files(x86)\Linux\Linux_driver\image\88.png)
+
+lcdif 节点信息是所有使用 I.MX6ULL 芯片的板子所共有的，并不是 完整的 lcdif 节点信息。像屏幕参数这些需要根据不同的硬件平台去添加。可以看出 lcdif 节点 的 compatible 属性值为“fsl,imx6ul-lcdif”和“fsl,imx28-lcdif”，因此在 Linux 源码中搜索这两个 字符串即可找到 I.MX6ULL 的 LCD 驱动文件，这个文件为 drivers/video/fbdev/mxsfb.c，mxsfb.c 就是 I.MX6ULL 的 LCD 驱动文件，在此文件中找到如下内容：
+
+```c
+static const struct of_device_id mxsfb_dt_ids[] = {
+	{ .compatible = "fsl,imx23-lcdif", .data = &mxsfb_devtype[0], },
+	{ .compatible = "fsl,imx28-lcdif", .data = &mxsfb_devtype[1], },
+	{ /* sentinel */ }
+};
+.....
+static struct platform_driver mxsfb_driver = {
+	.probe = mxsfb_probe,
+	.remove = mxsfb_remove,
+	.shutdown = mxsfb_shutdown,
+	.id_table = mxsfb_devtype,
+	.driver = {
+	.name = DRIVER_NAME,
+	.of_match_table = mxsfb_dt_ids,
+	.pm = &mxsfb_pm_ops,
+	},
+};
+
+module_platform_driver(mxsfb_driver);
+```
+
+这是一个标准的 platform 驱动，当驱动和设备匹配以后 mxsfb_probe 函数就会执行
+
+ Linux 下 Framebuffer 驱动的编写流程:Linux 内核将所有的 Framebuffer 抽象为一个叫做 fb_info 的结构 体，fb_info 结构体包含了 Framebuffer 设备的完整属性和操作集合，因此每一个 Framebuffer 设 备都必须有一个 fb_info。换言之就是，**LCD 的驱动就是构建 fb_info，并且向系统注册 fb_info 的过程**。fb_info 结构体定义在 include/linux/fb.h 文件里面:
+
+```c
+struct fb_info {
+	atomic_t count;
+	int node;
+	int flags;
+	struct mutex lock; /* 互斥锁 */
+	struct mutex mm_lock; /* 互斥锁，用于 fb_mmap 和 smem_*域*/
+	struct fb_var_screeninfo var; /* 当前可变参数 */
+	struct fb_fix_screeninfo fix; /* 当前固定参数 */
+	struct fb_monspecs monspecs; /* 当前显示器特性 */
+	struct work_struct queue; /* 帧缓冲事件队列 */
+	struct fb_pixmap pixmap; /* 图像硬件映射 */
+	struct fb_pixmap sprite; /* 光标硬件映射 */
+	struct fb_cmap cmap; /* 当前调色板 */
+	struct list_head modelist; /* 当前模式列表 */
+	struct fb_videomode *mode; /* 当前视频模式 */
+
+#ifdef CONFIG_FB_BACKLIGHT /* 如果 LCD 支持背光的话 */
+	/* assigned backlight device */
+	/* set before framebuffer registration, 
+	remove after unregister */
+	struct backlight_device *bl_dev; /* 背光设备 */
+	
+	/* Backlight level curve */
+	struct mutex bl_curve_mutex; 
+	u8 bl_curve[FB_BACKLIGHT_LEVELS];
+#endif
+......
+	struct fb_ops *fbops; /* 帧缓冲操作函数集 */ 
+	struct device *device; /* 父设备 */
+	struct device *dev; /* 当前 fb 设备 */
+	int class_flag; /* 私有 sysfs 标志 */
+	..
+	char __iomem *screen_base; /* 虚拟内存基地址(屏幕显存) */
+	unsigned long screen_size; /* 虚拟内存大小(屏幕显存大小) */
+	void *pseudo_palette; /* 伪 16 位调色板 */
+......
+};
+```
+
+重点关注 var、fix、fbops、screen_base、screen_size 和 pseudo_palette。
+
+mxsfb_probe 函数的主要工作内容为：
+
+1. 申请 fb_info。
+2. 初始化 fb_info 结构体中的各个成员变量。
+3. 初始化 eLCDIF 控制器。
+4. 使用 register_framebuffer 函数向 Linux 内核注册初始化好的 fb_info
+   register_framebuffer 函数原型如下：
+   ![image-20231031111728501](D:\Program Files(x86)\Linux\Linux_driver\image\89.png)
+
+mxsfb_probe 函数（见开发指南P1423）
+
+### Linux RTC驱动实验
+
+RTC 设备驱动是一个标准的字符设备驱动，应用程序通过 open、release、read、write 和 ioctl 等函数完成对 RTC 设备的操作。RTC 硬件原理：开发指南C25
+
+Linux 内核将 RTC 设备抽象为 **rtc_device 结构体**，因此 RTC 设备驱动就是申请并初始化 rtc_device，最后将 rtc_device 注册到 Linux 内核里面，这样 Linux 内核就有一个 RTC 设备了。此结构体定义在 include/linux/rtc.h 文件中:
+
+```c
+struct rtc_device
+{
+	struct device dev; /* 设备 */
+	struct module *owner;
+	
+	int id; /* ID */ 
+	char name[RTC_DEVICE_NAME_SIZE]; /* 名字 */
+	
+	const struct rtc_class_ops *ops; /* RTC 设备底层操作函数 */
+	struct mutex ops_lock;
+	
+	struct cdev char_dev; /* 字符设备 */
+	unsigned long flags;
+	
+	unsigned long irq_data;
+	spinlock_t irq_lock;
+	wait_queue_head_t irq_queue;
+	struct fasync_struct *async_queue;
+	
+	struct rtc_task *irq_task;
+	spinlock_t irq_task_lock;
+	int irq_freq;
+	int max_user_freq;
+	
+	struct timerqueue_head timerqueue;
+	struct rtc_timer aie_timer;
+	struct rtc_timer uie_rtctimer;
+	struct hrtimer pie_timer; /* sub second exp, so needs hrtimer */
+	int pie_enabled;
+	struct work_struct irqwork;
+	/* Some hardware can't support UIE mode */
+	int uie_unsupported;
+......
+};
+```
+
+显然RTC设备结构体中**struct rtc_class_ops *ops**是操作函数集合，这是一个 rtc_class_ops 类型的指针变量，rtc_class_ops 为 RTC 设备的最底层操作函数集合，包括从 RTC 设备中读取时间、向 RTC 设备写入新的时间值等。此结构体定义在 include/linux/rtc.h 文件中，内容如下：
+
+```c
+struct rtc_class_ops {
+	int (*open)(struct device *);
+	void (*release)(struct device *);
+	int (*ioctl)(struct device *, unsigned int, unsigned long);
+	int (*read_time)(struct device *, struct rtc_time *);
+	int (*set_time)(struct device *, struct rtc_time *);
+	int (*read_alarm)(struct device *, struct rtc_wkalrm *);
+	int (*set_alarm)(struct device *, struct rtc_wkalrm *);
+	int (*proc)(struct device *, struct seq_file *);
+	int (*set_mmss64)(struct device *, time64_t secs);
+	int (*set_mmss)(struct device *, unsigned long secs);
+	int (*read_callback)(struct device *, int data);
+	int (*alarm_irq_enable)(struct device *, unsigned int enabled);
+};
+
+```
+
+注意， rtc_class_ops 中的这些函数只是最底层的 RTC 设备操作函数，并不是提供给应用层的 file_operations 函数操作集。RTC 是个字符设备，那么肯定有字符设备的 file_operations 函数操 作集，Linux 内核提供了一个 RTC 通用字符设备驱动文件，文件名为 drivers/rtc/rtc-dev.c，其中提供了所有RTC设备公用的file_operations 函数操作集：
+
+```c
+static const struct file_operations rtc_dev_fops = {
+	.owner = THIS_MODULE,
+	.llseek = no_llseek,
+	.read = rtc_dev_read,
+	.poll = rtc_dev_poll,
+	.unlocked_ioctl = rtc_dev_ioctl,
+	.open = rtc_dev_open,
+	.release = rtc_dev_release,
+	.fasync = rtc_dev_fasync,
+};
+
+```
+
+应用程序可以通过 ioctl 函 数来设置/读取时间、设置/读取闹钟的操作，那么对应的 **rtc_dev_ioctl** 函数就会执行， rtc_dev_ioctl 最终会通过操作 rtc_class_ops 中的 read_time、set_time 等函数来对具体 RTC 设备 的读写操作。 
+rtc_dev_ioctl 函数：见开发指南P1438。
+
+Linux 内核中 RTC 驱动调用流程：
+![image-20231101103142087](D:\Program Files(x86)\Linux\Linux_driver\image\90.png)
+
+当 rtc_class_ops 准备好以后需要将其注册到 Linux 内核中，这里我们可以使用 rtc_device_register函数完成注册工作。此函数会申请一个rtc_device并且初始化这个rtc_device， 最后向调用者返回这个 rtc_device，此函数原型如下：
+![image-20231101105521873](D:\Program Files(x86)\Linux\Linux_driver\image\92.png)
+
+当卸载 RTC 驱动的时候需要调用 rtc_device_unregister 函数来注销注册的 rtc_device，函数 原型如下：
+![image-20231101105537416](D:\Program Files(x86)\Linux\Linux_driver\image\91.png)
+
+还有另外一对 rtc_device 注册函数 devm_rtc_device_register 和 devm_rtc_device_unregister， 分别为注册和注销 rtc_device。
+
+#### IMX6ULL内部RTC驱动分析
+
+对 于大多数的 SOC 来讲，内部 RTC 驱动都不需要我们去编写，半导体厂商会编写好。虽然不用编写 RTC 驱动，但是我们得看一下这些原厂是怎么编写 RTC 驱动。
+
+见开发指南P1440
+
+linux中date查看事件，date -s设置时间，hwclock -w将当前系统时间写入到 RTC 里面。
+
+### Linux I2C驱动
+
+#### 裸机中的I2C驱动
+
+在裸机中编写的关于AP3216C的驱动，一共有四个文件：bsp_i2c.c、 bsp_i2c.h、bsp_ap3216c.c 和 bsp_ap3216c.h。其中前两个是I.MX6U 的 IIC 接口驱动，后两个文 件是 AP3216C 这个 I2C 设备驱动文件。相当于有两部分驱动：
+
+1. I2C 主机驱动。
+2. I2C 设备驱动。
+
+对于 I2C 主机驱动，一旦编写完成就不需要再做修改，其他的 I2C 设备直接调用主机驱动 提供的 API 函数完成读写操作即可。这个正好符合 Linux 的驱动分离与分层的思想，因此 Linux 内核也将 I2C 驱动分为两部分：
+
+1. I2C 总线驱动，I2C 总线驱动就是 SOC 的 I2C 控制器驱动，也叫做 I2C 适配器驱动。
+2. I2C 设备驱动，I2C 设备驱动就是针对具体的 I2C 设备而编写的驱动。
+
+#### I2C 总线驱动
+
+platform 是虚拟出来的一条总线， 目的是为了实现总线、设备、驱动框架。但是对于I2C 而言，不需要虚拟出一条总线，直接使用 I2C 总线即可。I2C 总线驱动重点是 I2C 适配器(也就是 SOC 的 I2C 接口控制器)驱动，这里要用到 两个重要的数据结构：**i2c_adapter 和 i2c_algorithm**，Linux 内核将 SOC 的 I2C 适配器(控制器) 抽象成 i2c_adapter，i2c_adapter 结构体定义在 include/linux/i2c.h 文件中，结构体内容如下：
+
+```c
+struct i2c_adapter {
+	struct module *owner;
+	unsigned int class; /* classes to allow probing for */
+	const struct i2c_algorithm *algo; /* 总线访问算法 */
+	void *algo_data;
+	
+	/* data fields that are valid for all devices */
+	struct rt_mutex bus_lock;
+	
+	int timeout; /* in jiffies */
+	int retries;
+	struct device dev; /* the adapter device */
+	
+	int nr;
+	char name[48];
+	struct completion dev_released;
+	
+	struct mutex userspace_clients_lock;
+	struct list_head userspace_clients;
+	
+	struct i2c_bus_recovery_info *bus_recovery_info;
+	const struct i2c_adapter_quirks *quirks;
+};
+
+```
+
+i2c_algorithm 类型的指针变量 algo，对于一个 I2C 适配器，肯定要对外提供读 写 API 函数，设备驱动程序可以使用这些 API 函数来完成读写操作。i2c_algorithm 就是 I2C 适配器与 IIC 设备进行通信的方法。
+
+i2c_algorithm 结构体定义在 include/linux/i2c.h 文件中：
+
+```c
+struct i2c_algorithm {
+.....
+	int (*master_xfer)(struct i2c_adapter *adap,
+							struct i2c_msg *msgs,int num);
+	int (*smbus_xfer) (struct i2c_adapter *adap, u16 addr,
+	unsigned short flags, char read_write,
+	u8 command, int size, union i2c_smbus_data *data);
+	
+	/* To determine what the adapter supports */
+	u32 (*functionality) (struct i2c_adapter *);
+.....
+};
+
+```
+
+master_xfer 就是 I2C 适配器的传输函数，可以通过此函数来完成与 IIC 设备之 间的通信。
+smbus_xfer 就是 SMBUS 总线的传输函数。
+
+综上所述，I2C 总线驱动，或者说 I2C 适配器驱动的主要工作就是初始化 i2c_adapter 结构 体变量，然后设置 i2c_algorithm 中的 master_xfer 函数。完成以后通过 i2c_add_numbered_adapter 或 i2c_add_adapter 这两个函数向系统注册设置好的 i2c_adapter，这两个函数的原型如下：
+![image-20231101124803682](D:\Program Files(x86)\Linux\Linux_driver\image\93.png)
+
+#### I2C 设备驱动
+
+I2C 设备驱动重点关注两个数据结构：i2c_client 和 i2c_driver，根据总线、设备和驱动模型,I2C 总线上一小节已经讲了。还剩下设备和驱动，i2c_client 就是描述设备信息的，i2c_driver 描述驱动内容，类似于 platform_driver。
+
+##### 1、i2c_client 结构体
+
+i2c_client 结构体定义在 include/linux/i2c.h 文件中，内容如下：
+
+```c
+struct i2c_client {
+	unsigned short flags; /* 标志 */
+	unsigned short addr; /* 芯片地址，7 位，存在低 7 位*/
+...
+	char name[I2C_NAME_SIZE]; /* 名字 */
+	struct i2c_adapter *adapter; /* 对应的 I2C 适配器 */
+	struct device dev; /* 设备结构体 */
+	int irq; /* 中断 */
+	struct list_head detected;
+...
+};
+```
+
+一个设备对应一个 i2c_client，每检测到一个 I2C 设备就会给这个 I2C 设备分配一个 i2c_client。
+
+##### 2、i2c_driver 结构体
+
+i2c_driver 类似 platform_driver，是我们编写 I2C 设备驱动重点要处理的内容，i2c_driver 结 构体定义在 include/linux/i2c.h 文件中，内容如下：
+
+```c
+struct i2c_driver {
+	unsigned int class;
+	
+	/* Notifies the driver that a new bus has appeared. You should 
+	* avoid using this, it will be removed in a near future.
+	*/
+	int (*attach_adapter)(struct i2c_adapter *) __deprecated;
+	
+	/* Standard driver model interfaces */
+	int (*probe)(struct i2c_client *, const struct i2c_device_id *);
+	int (*remove)(struct i2c_client *);
+	
+	/* driver model interfaces that don't relate to enumeration */
+	void (*shutdown)(struct i2c_client *);
+	
+	/* Alert callback, for example for the SMBus alert protocol.
+	* The format and meaning of the data value depends on the 
+	* protocol.For the SMBus alert protocol, there is a single bit 
+	* of data passed as the alert response's low bit ("event 
+	flag"). */
+	void (*alert)(struct i2c_client *, unsigned int data);
+	
+	/* a ioctl like command that can be used to perform specific 
+	* functions with the device.
+	*/
+	int (*command)(struct i2c_client *client, unsigned int cmd,*arg);
+	
+	struct device_driver driver;
+	const struct i2c_device_id *id_table;
+	
+	/* Device detection callback for automatic device creation */
+	int (*detect)(struct i2c_client *, struct i2c_board_info *);
+	const unsigned short *address_list;
+	struct list_head clients;
+};
+
+```
+
+当 I2C 设备和驱动匹配成功以后 probe 函数就会执行，和 platform 驱动一样。
+device_driver 驱动结构体，如果使用设备树的话，需要设置 device_driver 的 of_match_table 成员变量，也就是驱动的兼容(compatible)属性。
+id_table 是传统的、未使用设备树的设备匹配 ID 表。
+
+对于我们 I2C 设备驱动编写人来说，重点工作就是构建 i2c_driver，构建完成以后需要向 Linux 内核注册这个 i2c_driver。i2c_driver 注册函数为 int i2c_register_driver，此函数原型如下：
+![image-20231101125741199](D:\Program Files(x86)\Linux\Linux_driver\image\94.png)
+
+另外 i2c_add_driver 也常常用于注册 i2c_driver，i2c_add_driver 是一个宏，定义如下：
+![image-20231101125802520](D:\Program Files(x86)\Linux\Linux_driver\image\95.png)
+
+注销 I2C 设备驱动的时候需要将前面注册的 i2c_driver 从 Linux 内核中注销掉，需要用到 i2c_del_driver 函数，此函数原型如下：
+![image-20231101125836462](D:\Program Files(x86)\Linux\Linux_driver\image\96.png)
+
+#### I2C 设备和驱动匹配过程
+
+I2C 设备和驱动的匹配过程是由 I2C 核心来完成的，drivers/i2c/i2c-core.c 就是 I2C 的核心 部分，I2C 核心提供了一些与具体硬件无关的 API 函数，比如前面讲过的：
+
+1. ##### i2c_adapter 注册/注销函数
+
+   ![image-20231101130518903](D:\Program Files(x86)\Linux\Linux_driver\image\97.png)
+
+2. ##### i2c_driver 注册/注销函数
+
+   ![image-20231101130549241](D:\Program Files(x86)\Linux\Linux_driver\image\98.png)
+
+   设备和驱动的匹配过程也是由 I2C 总线完成的，I2C 总线的数据结构为 i2c_bus_type，定义 在 drivers/i2c/i2c-core.c 文件，i2c_bus_type 内容如下：
+
+   ```c
+   struct bus_type i2c_bus_type = {
+   	.name = "i2c",
+   	.match = i2c_device_match,
+   	.probe = i2c_device_probe,
+   	.remove = i2c_device_remove,
+   	.shutdown = i2c_device_shutdown,
+   };
+   ```
+
+   .match 就是 I2C 总线的设备和驱动匹配函数，在这里就是 i2c_device_match 这个函数，此函数内容如下：
+
+   ```c
+   static int i2c_device_match(struct device *dev, struct device_driver *drv)
+   {
+   	struct i2c_client *client = i2c_verify_client(dev);
+   	struct i2c_driver *driver;
+   	
+   	if (!client)
+   	return 0;
+   	
+   	/* Attempt an OF style match */
+   	if (of_driver_match_device(dev, drv))
+   	return 1;
+   	
+   	/* Then ACPI style match */
+   	if (acpi_driver_match_device(dev, drv))
+   	return 1;
+   	
+   	driver = to_i2c_driver(drv);
+   	/* match on an id table if there is one */
+   	if (driver->id_table)
+   	return i2c_match_id(driver->id_table, client) != NULL;
+   	
+   	return 0;
+   }
+   ```
+
+####  I.MX6U 的 I2C 适配器驱动分析
+
+Linux 下的 I2C 驱动框架，重点分为 I2C 适配器驱动和 I2C 设备驱动， 其中 I2C 适配器驱动就是 SOC 的 I2C 控制器驱动。I2C 设备驱动是需要用户根据不同的 I2C 设 备去编写，而 I2C 适配器驱动一般都是 SOC 厂商去编写的，比如 NXP 就编写好了 I.MX6U 的 I2C 适配器驱动。
+
+见开发指南P1455
+
+#### I2C设备驱动编写流程
+
+##### I2C设备信息描述
+
+1. 未使用设备树时：
+
+   在未使用设备树的时候需要在 BSP 里面使用 i2c_board_info 结构体来描 述一个具体的 I2C 设备。i2c_board_info 结构体如下：
+
+   ```c
+   struct i2c_board_info {
+   	char type[I2C_NAME_SIZE]; /* I2C 设备名字 */
+   	unsigned short flags; /* 标志 */
+   	unsigned short addr; /* I2C 器件地址 */
+   	void *platform_data; 
+   	struct dev_archdata *archdata;
+   	struct device_node *of_node;
+   	struct fwnode_handle *fwnode;
+   	int irq;
+   };
+   
+   ```
+
+   type 和 addr 这两个成员变量是必须要设置的，一个是 I2C 设备的名字，一个是 I2C 设备的 器件地址。
+
+   **I2C_BOARD_INFO** 是一个初始化i2c_board_info结构体宏，定义如下：
+
+   ```c
+   #define I2C_BOARD_INFO(dev_type, dev_addr) \
+   						.type = dev_type, .addr = (dev_addr)
+   ```
+
+2. 使用设备树
+
+   使用设备树的时候 I2C 设备信息通过创建相应的节点就行了，比如 NXP 官方的 EVK 开发 板在 I2C1 上接了 mag3110 这个磁力计芯片，因此必须在 i2c1 节点下创建 mag3110 子节点，然 后在这个子节点内描述 mag3110 这个芯片的相关信息。打开 imx6ull-14x14-evk.dts 这个设备树 文件，然后找到如下内容：
+
+   ```
+   &i2c1 {
+   	clock-frequency = <100000>;
+   	pinctrl-names = "default";
+   	pinctrl-0 = <&pinctrl_i2c1>;
+   	status = "okay";
+   	
+   	mag3110@0e {
+   		compatible = "fsl,mag3110";
+   		reg = <0x0e>;
+   		position = <2>;
+   	 };
+   	....
+    };
+   ```
+
+##### I2C 设备数据收发处理流程
+
+I2C 设备驱动首先要做的就是初始化 i2c_driver 并向 Linux 内核 注册。当设备和驱动匹配以后 i2c_driver 里面的 probe 函数就会执行，probe 函数里面所做的就是字符设备驱动那一套了。
+
+一般需要在 probe 函数里面初始化 I2C 设备，要初始化 I2C 设备就 必须能够对 I2C 设备寄存器进行读写操作，这里就要用到 i2c_transfer 函数了。i2c_transfer 函数 最终会调用 I2C 适配器中 i2c_algorithm 里面的 master_xfer 函数，
+
+对于 I.MX6U 而言就是 i2c_imx_xfer 这个函数。i2c_transfer 函数原型如下：
+
+![image-20231102112430430](D:\Program Files(x86)\Linux\Linux_driver\image\99.png)
+
+重点来看一下 msgs 这个参数，这是一个 i2c_msg 类型的指针参数，I2C 进行数据收发 说白了就是消息的传递，Linux 内核使用 i2c_msg 结构体来描述一个消息。i2c_msg 结构体定义 在 include/uapi/linux/i2c.h 文件中，结构体内容如下：
+
+```c
+struct i2c_msg {
+	__u16 addr; /* 从机地址 */
+	__u16 flags; /* 标志 */
+	#define I2C_M_TEN 0x0010
+	#define I2C_M_RD 0x0001
+	#define I2C_M_STOP 0x8000
+	#define I2C_M_NOSTART 0x4000
+	#define I2C_M_REV_DIR_ADDR 0x2000 
+	#define I2C_M_IGNORE_NAK 0x1000 
+	#define I2C_M_NO_RD_ACK 0x0800
+	#define I2C_M_RECV_LEN 0x0400
+	__u16 len; /* 消息(本 msg)长度 */
+	__u8 *buf; /* 消息数据 */
+};
+```
+
+使用 i2c_transfer 函数发送数据之前要先构建好 i2c_msg
+
+另外还有两个API函数分别用于I2C数据的收发操作，这两个函数最终都会调用i2c_transfer。 首先来看一下 I2C 数据发送函数 i2c_master_send，函数原型如下：
