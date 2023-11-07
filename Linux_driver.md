@@ -1656,31 +1656,31 @@ input 核心层会向 Linux 内核注册一个字符设备，drivers/input/input
 可以将开发板上的按键值设置为上面的任意一个，比如等会将开发板上的KEY设置为KEY_0。
 
 在编写 input 设备驱动的时候我们需要先申请一个 input_dev 结构体变量，使用 input_allocate_device 函数来**申请**一个 input_dev，此函数原型如下所示：
-![image-20231030105201841](D:\Program Files(x86)\Linux\Linux_driver\image\80.png)
+![image-20231030105201841](image\80.png)
 
 要注销的 input 设备的话需要使用 input_free_device 函数来释放掉前面申请到的 input_dev，input_free_device 函数原型如下：
-![image-20231030105321368](D:\Program Files(x86)\Linux\Linux_driver\image\81.png)
+![image-20231030105321368](image\81.png)
 
 申请好一个 input_dev 以后就需要**初始化**这个 input_dev，需要初始化的内容主要为事件类 型(evbit)和事件值(keybit)这两种。
 
 input_dev 初始化完成以后就需要**向 Linux 内核注册 input_dev** 了，需要用到 input_register_device 函数，此函数原型如下：
 
-![image-20231030105852731](D:\Program Files(x86)\Linux\Linux_driver\image\82.png)
+![image-20231030105852731](image\82.png)
 
 同样的，注销 input 驱动的时候也需要使用 input_unregister_device 函数来注销掉前面注册 的 input_dev，input_unregister_device 函数原型如下：
-![image-20231030105920769](D:\Program Files(x86)\Linux\Linux_driver\image\83.png)
+![image-20231030105920769](image\83.png)
 
 ##### 2、上报输入事件
 
 向 Linux 内核注册好 input_dev 以后还不能高枕无忧的使用 input 设备，input 设备都 是具有输入功能的，但是具体是什么样的输入值 Linux 内核是不知道的，我们需要获取到具体 的输入值，或者说是输入事件，然后将输入事件上报给 Linux 内核。比如按键，我们需要在按 键中断处理函数，或者消抖定时器中断函数中将按键值上报给 Linux 内核，这样 Linux 内核才 能获取到正确的输入值。不同的事件，其上报事件的 API 函数不同，我们依次来看一下一些常 用的事件上报 API 函数。
 
 首先是 input_event 函数，此函数用于上报指定的事件以及对应的值，函数原型如下：
-![image-20231030110321473](D:\Program Files(x86)\Linux\Linux_driver\image\84.png)
+![image-20231030110321473](image\84.png)
 
 input_event 函数可以上报所有的事件类型和事件值，Linux 内核也提供了其他的针对具体 事件的上报函数，这些函数其实都用到了 input_event 函数。
 
 比如上报按键所使用的 input_report_key 函数：
-![image-20231030110430810](D:\Program Files(x86)\Linux\Linux_driver\image\85.png)
+![image-20231030110430810](image\85.png)
 
 同样的还有一些其他的事件上报函数，这些函数如下所示：
 
@@ -1694,7 +1694,7 @@ void input_mt_sync(struct input_dev *dev)
 
 当我们上报事件以后还需要**使用 input_sync 函数来告诉 Linux 内核 input 子系统上报结束**， input_sync 函数本质是上报一个同步事件，此函数原型如下所示：
 
-![image-20231030110540253](D:\Program Files(x86)\Linux\Linux_driver\image\86.png)
+![image-20231030110540253](image\86.png)
 
 #### input_event 结构体
 
@@ -1714,7 +1714,7 @@ input_event 结构体中的各个成员变量:
 1. time：时间，也就是此事件发生的时间，为 timeval 结构体类型
 
    timeval 结构体定义如下：
-   ![image-20231030110813861](D:\Program Files(x86)\Linux\Linux_driver\image\87.png)
+   ![image-20231030110813861](image\87.png)
    tv_sec 和 tv_usec 这两个成员变量都为 long 类型，也就是 **32 位**，这个一定要记住
 
 2. type：事件类型.比如 EV_KEY，表示此次事件为按键事件，此成员变量为 **16 位**。
@@ -1779,7 +1779,7 @@ LCD 裸机例程主要分两部分：
 NXP 官方的设备树已经添加了 LCD 设备节点，只是此 节点的 LCD 屏幕信息是针对 NXP 官方 EVK 开发板所使用的 4.3 寸 480*272 编写的，我们需 要将其改为我们所使用的屏幕参数。
 
 看一下 NXP 官方编写的 Linux 下的 LCD 驱动，打开 imx6ull.dtsi，然后找到 lcdif 节点内容，如下所示：
-![image-20231031105921524](D:\Program Files(x86)\Linux\Linux_driver\image\88.png)
+![image-20231031105921524](image\88.png)
 
 lcdif 节点信息是所有使用 I.MX6ULL 芯片的板子所共有的，并不是 完整的 lcdif 节点信息。像屏幕参数这些需要根据不同的硬件平台去添加。可以看出 lcdif 节点 的 compatible 属性值为“fsl,imx6ul-lcdif”和“fsl,imx28-lcdif”，因此在 Linux 源码中搜索这两个 字符串即可找到 I.MX6ULL 的 LCD 驱动文件，这个文件为 drivers/video/fbdev/mxsfb.c，mxsfb.c 就是 I.MX6ULL 的 LCD 驱动文件，在此文件中找到如下内容：
 
@@ -1858,7 +1858,7 @@ mxsfb_probe 函数的主要工作内容为：
 3. 初始化 eLCDIF 控制器。
 4. 使用 register_framebuffer 函数向 Linux 内核注册初始化好的 fb_info
    register_framebuffer 函数原型如下：
-   ![image-20231031111728501](D:\Program Files(x86)\Linux\Linux_driver\image\89.png)
+   ![image-20231031111728501](image\89.png)
 
 mxsfb_probe 函数（见开发指南P1423）
 
@@ -1945,13 +1945,13 @@ static const struct file_operations rtc_dev_fops = {
 rtc_dev_ioctl 函数：见开发指南P1438。
 
 Linux 内核中 RTC 驱动调用流程：
-![image-20231101103142087](D:\Program Files(x86)\Linux\Linux_driver\image\90.png)
+![image-20231101103142087](image\90.png)
 
 当 rtc_class_ops 准备好以后需要将其注册到 Linux 内核中，这里我们可以使用 rtc_device_register函数完成注册工作。此函数会申请一个rtc_device并且初始化这个rtc_device， 最后向调用者返回这个 rtc_device，此函数原型如下：
-![image-20231101105521873](D:\Program Files(x86)\Linux\Linux_driver\image\92.png)
+![image-20231101105521873](image\92.png)
 
 当卸载 RTC 驱动的时候需要调用 rtc_device_unregister 函数来注销注册的 rtc_device，函数 原型如下：
-![image-20231101105537416](D:\Program Files(x86)\Linux\Linux_driver\image\91.png)
+![image-20231101105537416](image\91.png)
 
 还有另外一对 rtc_device 注册函数 devm_rtc_device_register 和 devm_rtc_device_unregister， 分别为注册和注销 rtc_device。
 
@@ -2032,7 +2032,7 @@ master_xfer 就是 I2C 适配器的传输函数，可以通过此函数来完成
 smbus_xfer 就是 SMBUS 总线的传输函数。
 
 综上所述，I2C 总线驱动，或者说 I2C 适配器驱动的主要工作就是初始化 i2c_adapter 结构 体变量，然后设置 i2c_algorithm 中的 master_xfer 函数。完成以后通过 i2c_add_numbered_adapter 或 i2c_add_adapter 这两个函数向系统注册设置好的 i2c_adapter，这两个函数的原型如下：
-![image-20231101124803682](D:\Program Files(x86)\Linux\Linux_driver\image\93.png)
+![image-20231101124803682](image\93.png)
 
 #### I2C 设备驱动
 
@@ -2106,13 +2106,13 @@ device_driver 驱动结构体，如果使用设备树的话，需要设置 devic
 id_table 是传统的、未使用设备树的设备匹配 ID 表。
 
 对于我们 I2C 设备驱动编写人来说，重点工作就是构建 i2c_driver，构建完成以后需要向 Linux 内核注册这个 i2c_driver。i2c_driver 注册函数为 int i2c_register_driver，此函数原型如下：
-![image-20231101125741199](D:\Program Files(x86)\Linux\Linux_driver\image\94.png)
+![image-20231101125741199](image\94.png)
 
 另外 i2c_add_driver 也常常用于注册 i2c_driver，i2c_add_driver 是一个宏，定义如下：
-![image-20231101125802520](D:\Program Files(x86)\Linux\Linux_driver\image\95.png)
+![image-20231101125802520](image\95.png)
 
 注销 I2C 设备驱动的时候需要将前面注册的 i2c_driver 从 Linux 内核中注销掉，需要用到 i2c_del_driver 函数，此函数原型如下：
-![image-20231101125836462](D:\Program Files(x86)\Linux\Linux_driver\image\96.png)
+![image-20231101125836462](image\96.png)
 
 #### I2C 设备和驱动匹配过程
 
@@ -2120,11 +2120,11 @@ I2C 设备和驱动的匹配过程是由 I2C 核心来完成的，drivers/i2c/i2
 
 1. ##### i2c_adapter 注册/注销函数
 
-   ![image-20231101130518903](D:\Program Files(x86)\Linux\Linux_driver\image\97.png)
+   ![image-20231101130518903](image\97.png)
 
 2. ##### i2c_driver 注册/注销函数
 
-   ![image-20231101130549241](D:\Program Files(x86)\Linux\Linux_driver\image\98.png)
+   ![image-20231101130549241](image\98.png)
 
    设备和驱动的匹配过程也是由 I2C 总线完成的，I2C 总线的数据结构为 i2c_bus_type，定义 在 drivers/i2c/i2c-core.c 文件，i2c_bus_type 内容如下：
 
@@ -2231,7 +2231,7 @@ I2C 设备驱动首先要做的就是初始化 i2c_driver 并向 Linux 内核 �
 
 对于 I.MX6U 而言就是 i2c_imx_xfer 这个函数。i2c_transfer 函数原型如下：
 
-![image-20231102112430430](D:\Program Files(x86)\Linux\Linux_driver\image\99.png)
+![image-20231102112430430](image\99.png)
 
 重点来看一下 msgs 这个参数，这是一个 i2c_msg 类型的指针参数，I2C 进行数据收发 说白了就是消息的传递，Linux 内核使用 i2c_msg 结构体来描述一个消息。i2c_msg 结构体定义 在 include/uapi/linux/i2c.h 文件中，结构体内容如下：
 
@@ -2255,3 +2255,398 @@ struct i2c_msg {
 使用 i2c_transfer 函数发送数据之前要先构建好 i2c_msg
 
 另外还有两个API函数分别用于I2C数据的收发操作，这两个函数最终都会调用i2c_transfer。 首先来看一下 I2C 数据发送函数 i2c_master_send，函数原型如下：
+![image-20231102112754611](image\100.png)
+
+I2C 数据接收函数为 i2c_master_recv，函数原型如下：
+![image-20231102112815107](image\101.png)
+
+### Linux SPI驱动
+
+SPI 驱动框架和 I2C 很类似，都分为主机控制器驱动和设备驱动，主机控制器也就是 SOC 的 SPI 控制器接口。不管是什么 SPI 设备，SPI 控制器部分的驱动都是一样，我们的重点就落在了 种类繁多的 SPI 设备驱动。
+
+#### SPI主机驱动
+
+SPI 主机驱动就是 SOC 的 SPI 控制器驱动，类似 I2C 驱动里面的适配器驱动。Linux 内核 使用 spi_master 表示 SPI 主机驱动，spi_master 是个结构体，定义在 include/linux/spi/spi.h 文件中：
+
+```c
+struct spi_master {
+	struct device dev;
+	struct list_head list;
+	.....
+	s16 bus_num;
+
+	/* chipselects will be integral to many controllers; some others
+	* might use board-specific GPIOs.
+	*/
+	u16 num_chipselect;
+	
+	/* some SPI controllers pose alignment requirements on DMAable
+	* buffers; let protocol drivers know about these requirements.
+	*/
+	u16 dma_alignment;
+	
+	/* spi_device.mode flags understood by this controller driver */
+	u16 mode_bits;
+	
+	/* bitmask of supported bits_per_word for transfers */
+	u32 bits_per_word_mask;
+	.....
+	/* limits on transfer speed */
+	u32 min_speed_hz;
+	u32 max_speed_hz;
+	
+	/* other constraints relevant to this driver */
+	u16 flags;
+	.....
+	/* lock and mutex for SPI bus locking */
+	spinlock_t bus_lock_spinlock;
+	struct mutex bus_lock_mutex;
+	
+	/* flag indicating that the SPI bus is locked for exclusive use */
+	bool bus_lock_flag;
+	..
+	int (*setup)(struct spi_device *spi);
+	
+	.....
+	int (*transfer)(struct spi_device *spi,
+	struct spi_message *mesg);
+	.....
+	int (*transfer_one_message)(struct spi_master *master,
+	struct spi_message *mesg);
+	.....
+};
+```
+
+transfer 函数，和 i2c_algorithm 中的 master_xfer 函数一样，控制器数据传输函 数。
+transfer_one_message 函数，也用于 SPI 数据发送，用于发送一个 spi_message， SPI 的数据会打包成 spi_message，然后以队列方式发送出去。
+也就是 SPI 主机端最终会通过 transfer 函数与 SPI 设备进行通信，因此对于 SPI 主机控制器的驱 动编写者而言 transfer 函数是需要实现的，因为不同的 SOC 其 SPI 控制器不同，寄存器都不一 样。和 I2C 适配器驱动一样，SPI 主机驱动一般都是 SOC 厂商去编写的，所以我们作为 SOC 的 使用者，这一部分的驱动就不用操心了，除非你是在 SOC 原厂工作，内容就是写 SPI 主机驱 动。
+SPI 主机驱动的核心就是申请 spi_master，然后初始化 spi_master，最后向 Linux 内核注册 spi_master。
+
+1. spi_master申请与释放
+
+   spi_alloc_master 函数用于申请 spi_master，函数原型如下：
+   ![image-20231103112654288](image\102.png)
+   spi_master 的释放通过 spi_master_put 函数来完成，当我们删除一个 SPI 主机驱动的时候就 需要释放掉前面申请的 spi_master，spi_master_put 函数原型如下：
+
+   ![image-20231103112740832](image\103.png)
+
+2. spi_master 的注册与注销
+
+   当 spi_master 初始化完成以后就需要将其注册到 Linux 内核，spi_master 注册函数为 spi_register_master，函数原型如下：
+   ![image-20231103112823623](image\104.png)
+
+   I.MX6U 的 SPI 主机驱动会采用 spi_bitbang_start 这个 API 函数来完成 spi_master 的注册， spi_bitbang_start 函数内部其实也是通过调用 spi_register_master 函数来完成 spi_master 的注册。
+
+   如果要注销 spi_master 的话可以使用 spi_unregister_master 函数，此函数原型为：
+   ![image-20231103112859675](image\105.png)
+   如果使用 spi_bitbang_start 注册 spi_master 的话就要使用 spi_bitbang_stop 来注销掉 spi_master。
+
+#### SPI设备驱动
+
+spi 设备驱动和 i2c 设备驱动也很类似，Linux 内核使用 spi_driver 结构体来表示 spi 设备驱 动，我们在编写 SPI 设备驱动的时候需要实现 spi_driver 。spi_driver 结构体定义在 include/linux/spi/spi.h 文件中，结构体内容如下：
+
+```c
+struct spi_driver {
+	const struct spi_device_id *id_table;
+	int (*probe)(struct spi_device *spi);
+	int (*remove)(struct spi_device *spi);
+	void (*shutdown)(struct spi_device *spi);
+	struct device_driver driver;
+};
+```
+
+spi_driver 和 i2c_driver、platform_driver 基本一样，当 SPI 设备和驱动匹配成功 以后 probe 函数就会执行。
+
+同样的，spi_driver 初始化完成以后需要向 Linux 内核注册，spi_driver 注册函数为 spi_register_driver，函数原型如下：
+![image-20231103113117665](image\106.png)
+
+注销 SPI 设备驱动以后也需要注销掉前面注册的 spi_driver，使用 spi_unregister_driver 函 数完成 spi_driver 的注销，函数原型如下：
+![image-20231103113135942](image\107.png)
+
+返回值：无
+
+#### SPI 设备和驱动匹配过程
+
+SPI 设备和驱动的匹配过程是由 SPI 总线来完成的，这点和 platform、I2C 等驱动一样，SPI 总线为 spi_bus_type，定义在 drivers/spi/spi.c 文件中：
+
+```c
+struct bus_type spi_bus_type = {
+	.name = "spi",
+	.dev_groups = spi_dev_groups,
+	.match = spi_match_device,
+	.uevent = spi_uevent,
+};
+```
+
+SPI 设备和驱动的匹配函数为 spi_match_device，函数内容如下：
+
+```c
+static int spi_match_device(struct device *dev,
+								struct device_driver *drv)
+{
+	const struct spi_device *spi = to_spi_device(dev);
+	const struct spi_driver *sdrv = to_spi_driver(drv);
+	
+	/* Attempt an OF style match */
+	if (of_driver_match_device(dev, drv))
+	return 1;
+	
+	/* Then try ACPI */
+	if (acpi_driver_match_device(dev, drv))
+	return 1;
+	
+	if (sdrv->id_table)
+	return !!spi_match_id(sdrv->id_table, spi);
+	
+	return strcmp(spi->modalias, drv->name) == 0;
+}
+```
+
+of_driver_match_device 函数用于完成设备树设备和驱动匹配。比较 SPI 设备节 点的 compatible 属性和 of_device_id 中的 compatible 属性是否相等，如果相当的话就表示 SPI 设 备和驱动匹配。
+acpi_driver_match_device 函数用于 ACPI 形式的匹配。
+spi_match_id 函数用于传统的、无设备树的 SPI 设备和驱动匹配过程。比较 SPI 设备名字和 spi_device_id 的 name 字段是否相等，相等的话就说明 SPI 设备和驱动匹配。
+
+#### imx6u spi主机驱动分析
+
+开发指南P1488
+
+#### SPI设备驱动编写流程
+
+##### SPI 设备信息描述
+
+1. IO 的 pinctrl 子节点创建与修改
+
+   一定要检测相应的IO有没有被其他设备使用
+
+2. SPI 设备节点的创建与修改
+
+   采用设备树的情况下，SPI 设备信息描述就通过创建相应的设备子节点来完成，我们可以 打开 imx6qdl-sabresd.dtsi 这个设备树头文件，在此文件里面找到如下所示内容：
+
+   ```
+   &ecspi1 {
+   	fsl,spi-num-chipselects = <1>;
+   	cs-gpios = <&gpio4 9 0>;
+   	pinctrl-names = "default";
+   	pinctrl-0 = <&pinctrl_ecspi1>;
+   	status = "okay";
+   	
+   	flash: m25p80@0 {
+   		#address-cells = <1>;
+   		#size-cells = <1>;
+   		compatible = "st,m25p32";
+   		spi-max-frequency = <20000000>;
+   		reg = <0>;
+   	};
+   };
+   ```
+
+##### SPI 设备数据收发处理流程
+
+SPI 设备驱动的核心是 spi_drive。r当我们向 Linux 内 核注册成功 spi_driver 以后就可以使用 SPI 核心层提供的 API 函数来对设备进行读写操作了。
+
+首先是 spi_transfer 结构体，此结构体用于描述 SPI 传输信息，结构体内容如下：
+
+```c
+struct spi_transfer {
+	/* it's ok if tx_buf == rx_buf (right?)
+	* for MicroWire, one buffer must be null
+	* buffers must work with dma_*map_single() calls, unless
+	* spi_message.is_dma_mapped reports a pre-existing mapping
+	*/
+	const void *tx_buf;
+	void *rx_buf;
+	unsigned len;
+	
+	dma_addr_t tx_dma;
+	dma_addr_t rx_dma;
+	struct sg_table tx_sg;
+	struct sg_table rx_sg;
+	
+	unsigned cs_change:1;
+	unsigned tx_nbits:3;
+	unsigned rx_nbits:3;
+	#define SPI_NBITS_SINGLE 0x01 /* 1bit transfer */
+	#define SPI_NBITS_DUAL 0x02 /* 2bits transfer */
+	#define SPI_NBITS_QUAD 0x04 /* 4bits transfer */
+	u8 bits_per_word;
+	u16 delay_usecs;
+	u32 speed_hz;
+	
+	struct list_head transfer_list;
+};
+
+```
+
+tx_buf 保存着要发送的数据。
+rx_buf 用于保存接收到的数据。
+len 是要进行传输的数据长度，SPI 是全双工通信，因此在一次通信中发送和 接收的字节数都是一样的，所以 spi_transfer 中也就没有发送长度和接收长度之分。
+
+spi_transfer 需要组织成 spi_message，spi_message 也是一个结构体，内容如下：
+
+```c
+struct spi_message {
+	struct list_head transfers;
+	
+	struct spi_device *spi;
+	
+	unsigned is_dma_mapped:1;
+	.....
+	/* completion is reported through a callback */
+	void (*complete)(void *context);
+	void *context;
+	unsigned frame_length;
+	unsigned actual_length;
+	int status;
+	
+	/* for optional use by whatever driver currently owns the
+	* spi_message ... between calls to spi_async and then later
+	* complete(), that's the spi_master controller driver.
+	*/
+	struct list_head queue;
+	void *state;
+};
+```
+
+在使用spi_message之前需要对其进行初始化，spi_message初始化函数为spi_message_init， 函数原型如下：
+![image-20231103125921517](image\108.png)
+
+spi_message 初始化完成以后需要将 spi_transfer 添加到 spi_message 队列中，这里我们要用 到 spi_message_add_tail 函数，此函数原型如下：
+![image-20231103125951019](image\109.png)
+
+spi_message 准备好以后就可以进行数据传输了，数据传输分为同步传输和异步传输，**同步传输会阻塞的等待 SPI 数据传输完成**，同步传输函数为 spi_sync，函数原型如下：
+![image-20231103130029074](image\110.png)
+
+异步传输不会阻塞的等到 SPI 数据传输完成，异步传输需要设置 spi_message 中的 complete 成员变量，complete 是一个回调函数，当 SPI 异步传输完成以后此函数就会被调用。SPI 异步传 输函数为 spi_async，函数原型如下：
+![image-20231103130052385](image\111.png)
+
+SPI 数据传输步骤如下：
+
+1. 申请并初始化 spi_transfer，设置 spi_transfer 的 tx_buf 成员变量，tx_buf 为要发送的数 据。然后设置 rx_buf 成员变量，rx_buf 保存着接收到的数据。最后设置 len 成员变量，也就是 要进行数据通信的长度。
+2. 使用 spi_message_init 函数初始化 spi_message。
+3. 使用spi_message_add_tail函数将前面设置好的spi_transfer添加到spi_message 队列中。
+4. 使用 spi_sync 函数完成 SPI 数据同步传输。
+
+### Linux RS232/485/GPS驱动
+
+串口是很常用的一个外设，在 Linux 下通常通过串口和其他设备或传感器进行通信，根据电平的不同，串口分为 TTL 和 RS232。不管是什么样的接口电平，其驱动程序都是一样的，通过外接 RS485 这样的芯片就可以将串口转换为 RS485 信号。
+
+正点原子的ALPHA开发板，RS232、RS485以及GPS模块接口都连接在了UART3接口上，所以这些外设最终都归结为UART3的串口驱动。
+
+#### Linux下UART驱动框架
+
+1. uart_driver 注册与注销
+
+​	同 I2C、SPI 一样，Linux 也提供了串口驱动框架，我们只需要按照相应的串口框架编写驱动程序即可。串口驱动没有主机端和设备端区别，只有一个串口驱动，而且这个串口驱动已经有NXP官方编写好了。所以只需要在设备树中添加要使用的串口节点信息。当系统启动以后串口驱动个设备匹配成功，相应的串口就会被驱动起来，并生成/dev/ttymxcX(X是数字)文件。
+
+​	**串口驱动框架**：
+​	uart_driver 结构体表示 UART 驱动，uart_driver 定义在 include/linux/serial_core.h 文件中：
+
+```c
+struct uart_driver {
+	struct module *owner; /* 模块所属者 */
+	const char *driver_name; /* 驱动名字 */
+	const char *dev_name; /* 设备名字 */
+	int major; /* 主设备号 */
+	int minor; /* 次设备号 */
+	int nr; /* 设备数 */
+	
+	struct console *cons; /* 控制台 */
+	/* 305 * these are private; the low level driver should not
+	* touch these; they should be initialised to NULL
+	*/
+	struct uart_state *state;
+	struct tty_driver *tty_driver;
+};
+```
+
+每个串口驱动都需要定义一个 uart_driver，加载驱动的时候通过 uart_register_driver 函数向
+系统注册这个 uart_driver，此函数原型如下：
+![image-20231106151252802](image/112.png)
+
+注销驱动的时候也需要注销掉前面注册的 uart_driver，需要用到 uart_unregister_driver 函数，函数原型如下：
+
+![image-20231106151653004](/media/pc/Program/Program Files(x86)/Linux/Linux_driver/image/113.png)
+
+2、uart_port 的添加与移除
+
+uart_port 表示一个具体的 port，uart_port 定义在 include/linux/serial_core.h 文件：
+
+```c
+struct uart_port {
+	spinlock_t lock; /* port lock */
+	unsigned long iobase; /* in/out[bwl] */
+	unsigned char __iomem *membase; /* read/write[bwl] */
+	const struct uart_ops *ops; 236 unsigned int custom_divisor; 237 unsigned int line; /* port index */
+	unsigned int minor; 239 resource_size_t mapbase; /* for ioremap */
+	resource_size_t mapsize; 241 struct device *dev; /* parent device */
+	....
+	....
+};
+```
+
+uart_port中最主要的就算ops，其中包含了串口的具体驱动函数每个UART都有一个uart_port，将uart_port和uart_driver结合起来会用到uart_add_one_port 函数，原型如下：
+![image-20231106152826513](/home/pc/.config/Typora/typora-user-images/image-20231106152826513.png)
+
+卸载 UART 驱动的时候也需要将 uart_port 从相应的 uart_driver 中移除，需要用到uart_remove_one_port 函数，函数原型如下：
+![image-20231106164947025](/media/pc/Program/Program Files(x86)/Linux/Linux_driver/image/114.png)
+
+3、uart_ops实现
+
+uart_port 中的 ops 成员变量很重要，因为 ops 包含了针对 UART 具体的驱动函数，Linux 系统收发数据最终调用的都是 ops 中的函数。ops 是 uart_ops类型的结构体指针变量，uart_ops 定义在 include/linux/serial_core.h 文件中，内容如下：
+
+```c
+struct uart_ops {
+	unsigned int (*tx_empty)(struct uart_port *);
+	void (*set_mctrl)(struct uart_port *, unsigned int mctrl);
+	unsigned int (*get_mctrl)(struct uart_port *);
+	void (*stop_tx)(struct uart_port *);
+	void (*start_tx)(struct uart_port *);
+	void (*throttle)(struct uart_port *);
+	void (*unthrottle)(struct uart_port *);
+	void (*send_xchar)(struct uart_port *, char ch);
+	void (*stop_rx)(struct uart_port *);
+	void (*enable_ms)(struct uart_port *);
+	void (*break_ctl)(struct uart_port *, int ctl);
+	int (*startup)(struct uart_port *);
+	void (*shutdown)(struct uart_port *);
+	void (*flush_buffer)(struct uart_port *);
+	void (*set_termios)(struct uart_port *, struct ktermios *new,
+	struct ktermios *old);
+	void (*set_ldisc)(struct uart_port *, struct ktermios *);
+	void (*pm)(struct uart_port *, unsigned int state,
+	unsigned int oldstate);
+	
+	/*
+	* Return a string describing the type of the port
+	*/
+	const char *(*type)(struct uart_port *);
+	
+	/*
+	* Release IO and memory resources used by the port.
+	* This includes iounmap if necessary.
+	*/
+	void (*release_port)(struct uart_port *);
+	
+	/*
+	* Request IO and memory resources used by the port.
+	* This includes iomapping the port if necessary.
+	*/
+	int (*request_port)(struct uart_port *);
+	void (*config_port)(struct uart_port *, int);
+	int (*verify_port)(struct uart_port *, struct serial_struct *);
+	int (*ioctl)(struct uart_port *, unsigned int, unsigned long);
+	#ifdef CONFIG_CONSOLE_POLL
+	int (*poll_init)(struct uart_port *);
+	void (*poll_put_char)(struct uart_port *, unsigned char);
+	int (*poll_get_char)(struct uart_port *);
+	#endif
+};
+
+```
+
+UART 驱动编写人员需要实现 uart_ops，因为 uart_ops 是最底层的 UART 驱动接口，是实 实在在的和 UART 寄存器打交道的。关于 uart_ops 结构体中的这些函数的具体含义请参考 Documentation/serial/driver 这个文档。
+看一下 NXP 官方的 UART 驱动
+
+#### IMX6ULL UART驱动分析
+
+见开发指南P1516
