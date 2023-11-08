@@ -2565,7 +2565,7 @@ struct uart_driver {
 
 注销驱动的时候也需要注销掉前面注册的 uart_driver，需要用到 uart_unregister_driver 函数，函数原型如下：
 
-![image-20231106151653004](/media/pc/Program/Program Files(x86)/Linux/Linux_driver/image/113.png)
+![image-20231106151653004](image/113.png)
 
 2、uart_port 的添加与移除
 
@@ -2588,7 +2588,7 @@ uart_port中最主要的就算ops，其中包含了串口的具体驱动函数�
 ![image-20231106152826513](/home/pc/.config/Typora/typora-user-images/image-20231106152826513.png)
 
 卸载 UART 驱动的时候也需要将 uart_port 从相应的 uart_driver 中移除，需要用到uart_remove_one_port 函数，函数原型如下：
-![image-20231106164947025](/media/pc/Program/Program Files(x86)/Linux/Linux_driver/image/114.png)
+![image-20231106164947025](image/114.png)
 
 3、uart_ops实现
 
@@ -2650,3 +2650,210 @@ UART 驱动编写人员需要实现 uart_ops，因为 uart_ops 是最底层的 U
 #### IMX6ULL UART驱动分析
 
 见开发指南P1516
+
+### Linux 多点电容触摸屏驱动
+
+#### 多点触摸（MT）协议
+
+电容触摸驱动的原理见开发指南第28章，以下是几个重要的知识点：
+
+1. 电容触摸屏是 IIC 接口的，需要触摸 IC。因此所谓的电容触摸驱动就是 IIC 设备驱动。
+2. 触摸 IC 提供了中断信号引脚(INT)，可以通过中断来获取触摸信息。
+3. 电容触摸屏得到的是触摸位置绝对信息以及触摸屏是否有按下。
+4. 电容触摸屏不需要校准，当然了，这只是理论上的，如果电容触摸屏质量比较差，或 者触摸玻璃和 TFT 之间没有完全对齐，那么也是需要校准的。
+
+根据以上几个知识点，我们可以得出电容触摸屏驱动其实就是以下几种 linux 驱动框架的 组合：
+
+1. IIC 设备驱动，因为电容触摸 IC 基本都是 IIC 接口的，因此大框架就是 IIC 设备驱动。
+2. 通过中断引脚(INT)向 linux 内核上报触摸信息，因此需要用到 linux 中断驱动框架。坐标的上报在中断服务函数中完成。
+3. 触摸屏的坐标信息、屏幕按下和抬起信息都属于 linux 的 input 子系统，因此向 linux 内 核上报触摸屏坐标信息就得使用 input 子系统。只是，我们得按照 linux 内核规定的规则来上报 坐标信息。
+
+IIC 驱动、中断驱动、input 子系统在前面章节均有了解，目前还差的就说input子系统下的多点电容触摸协议linux 内核中有一份文档详细的讲解了多点电容触摸屏协议，文档路径为：Documentation/input/multitouch-protocol.txt
+
+MT 协议被分为两种类型，Type A 和 TypeB，这两种类型的区别如下：
+
+- Type A:适用于触摸点不能被区分或者追踪，此类型的设备上报原始数据(此类型在实际使 用中非常少！)。
+- Type B:适用于有硬件追踪并能区分触摸点的触摸设备，此类型设备通过 slot 更新某一个 触摸点的信息，FT5426 就属于此类型，一般的多点电容触摸屏 IC 都有此能力。
+
+
+
+触摸点的信息通过一系列的 ABS_MT 事件(有的资料也叫消息)上报给 linux 内核，只有 ABS_MT 事件是用于多点触摸的，ABS_MT 事件定义在文件 include/uapi/linux/input.h 中，相关事件如下所示：
+
+```c
+#define ABS_MT_SLOT 		0x2f /* MT slot being modified */
+#define ABS_MT_TOUCH_MAJOR 	0x30 /* Major axis of touching ellipse */
+#define ABS_MT_TOUCH_MINOR 	0x31 /* Minor axis (omit if circular) */
+#define ABS_MT_WIDTH_MAJOR 	0x32 /* Major axis of approaching ellipse */
+#define ABS_MT_WIDTH_MINOR 	0x33 /* Minor axis (omit if circular) */
+#define ABS_MT_ORIENTATION 	0x34 /* Ellipse orientation */
+#define ABS_MT_POSITION_X 	0x35 /* Center X touch position */
+#define ABS_MT_POSITION_Y 	0x36 /* Center Y touch position */
+#define ABS_MT_TOOL_TYPE 	0x37 /* Type of touching device */
+#define ABS_MT_BLOB_ID 		0x38 /* Group a set of packets as a blob */
+#define ABS_MT_TRACKING_ID 	0x39 /* Unique ID of initiated contact */
+#define ABS_MT_PRESSURE 	0x3a /* Pressure on contact area */
+#define ABS_MT_DISTANCE 	0x3b /* Contact hover distance */
+#define ABS_MT_TOOL_X 		0x3c /* Center X tool position */
+#define ABS_MT_TOOL_Y 		0x3d /* Center Y tool position */
+```
+
+在上面这些众多的 ABS_MT 事 件 中 ， 我 们 最 常 用 的 就 是 ABS_MT_SLOT 、 ABS_MT_POSITION_X 、 ABS_MT_POSITION_Y 和 ABS_MT_TRACKING_ID 。
+
+其 中 ABS_MT_POSITION_X 和 ABS_MT_POSITION_Y 用来上 报触摸 点的 (X,Y) 坐标 信息 ， ABS_MT_SLOT 用来上 报触摸点 ID ， 对 于 Type B 类型的设备，需要用到 ABS_MT_TRACKING_ID 事件来区分触摸点。
+
+对于 Type A 类型的设备，通过 input_mt_sync()函数来隔离不同的触摸点数据信息，此函数原型如下所示：
+
+![image-20231108140520691](D:\ZLinux\Linux_driver\image\115.png)
+
+对于 Type B 类型的设备，上报触摸点信息的时候需要通过 input_mt_slot()函数区分是哪一 个触摸点，input_mt_slot()函数原型如下所示：
+
+![image-20231108140647779](D:\ZLinux\Linux_driver\image\116.png)
+
+不管是哪个类型的设备，最终都要调用 input_sync()函数来标识多点触摸信息传输完成，告 诉接收者处理之前累计的所有消息，并且准备好下一次接收。
+
+Type B 和 Type A 相比最大的区别就是 Type B 可以区分出触摸点， 因此可以减少发送到用户空间的数据。Type B 使用 slot 协 议区分具体的触摸点，slot 需要用到 ABS_MT_TRACKING_ID 消息，这个 ID 需要硬件提供， 或者通过原始数据计算出来。对于 Type A 设备，内核驱动需要一次性将触摸屏上所有的触摸点 信息全部上报，每个触摸点的信息在本次上报事件流中的顺序不重要，因为事件的过滤和手指 (触摸点)跟踪是在内核空间处理的。
+
+Type B 设备驱动需要给每个识别出来的触摸点分配一个 slot，后面使用这个 slot 来上报触 摸点信息。可以通过 slot 的 ABS_MT_TRACKING_ID 来新增、替换或删除触摸点。一个非负数 的 ID 表示一个有效的触摸点，-1 这个 ID 表示未使用 slot。一个以前不存在的 ID 表示这是一个 新加的触摸点，一个 ID 如果再也不存在了就表示删除了。
+
+#### Type A触摸点信息上报时序
+
+对于 Type A 类型的设备，发送触摸点信息的时序如下所示，这里以 2 个触摸点为例：
+
+```c
+1 ABS_MT_POSITION_X x[0]
+2 ABS_MT_POSITION_Y y[0]
+3 SYN_MT_REPORT
+4 ABS_MT_POSITION_X x[1]
+5 ABS_MT_POSITION_Y y[1]
+6 SYN_MT_REPORT
+7 SYN_REPORT
+```
+
+例子见开发指南P1541
+
+#### Type B 触摸点信息上报时序
+
+```
+1 ABS_MT_SLOT 0
+2 ABS_MT_TRACKING_ID 45
+3 ABS_MT_POSITION_X x[0]
+4 ABS_MT_POSITION_Y y[0]
+5 ABS_MT_SLOT 1
+6 ABS_MT_TRACKING_ID 46
+7 ABS_MT_POSITION_X x[1]
+8 ABS_MT_POSITION_Y y[1]
+9 SYN_REPORT
+```
+
+第 1 行，上报 ABS_MT_SLOT 事件，也就是触摸点对应的 SLOT。每次上报一个触摸点坐标之前要先使用input_mt_slot函数上报当前触摸点SLOT，触摸点的SLOT其实就是触摸点ID， 需要由触摸 IC 提供。 
+第 2 行，根据 Type B 的要求，每个 SLOT 必须关联一个 ABS_MT_TRACKING_ID，通过修改 SLOT 关联的 ABS_MT_TRACKING_ID 来完成对触摸点的添加、替换或删除。具体用到 的函数就是 input_mt_report_slot_state，如果是添加一个新的触摸点，那么此函数的第三个参数 active 要设置为 true，linux 内核会自动分配一个 ABS_MT_TRACKING_ID 值，不需要用户去指 定具体的 ABS_MT_TRACKING_ID 值。
+ 第 3 行，上报触摸点 0 的 X 轴坐标，使用函数 input_report_abs 来完成。
+ 第 4 行，上报触摸点 0 的 Y 轴坐标，使用函数 input_report_abs 来完成。 
+第 5~8 行，和第 1~4 行类似，只是换成了上报触摸点 0 的(X,Y)坐标信息 
+第 9 行，当所有的触摸点坐标都上传完毕以后就得发送 SYN_REPORT 事件，使用 input_sync 函数来完成。
+
+当一个触摸点移除以后，同样需要通过 SLOT 关联的 ABS_MT_TRACKING_ID 来处理， 时序如下所示：
+
+```
+1 ABS_MT_TRACKING_ID -1
+2 SYN_REPORT
+```
+
+第 1 行，当一个触摸点(SLOT)移除以后，需要通过 ABS_MT_TRACKING_ID 事件发送一 个-1 给内核。方法很简单，同样使用 input_mt_report_slot_state 函数来完成，只需要将此函数的 第三个参数 active 设置为 false 即可，不需要用户手动去设置-1。
+第 2 行，当所有的触摸点坐标都上传完毕以后就得发送 SYN_REPORT 事件。
+
+例子见开发指南P1543
+
+#### MT其他事件的使用
+
+可以根据实际需求将这些事件组成各种事件组合。最 简 单 的 组 合 就 是 ABS_MT_POSITION_X 和 ABS_MT_POSITION_Y，可以通过在这两个事件上报触摸点，如果设备支持的话，还可以使用 ABS_MT_TOUCH_MAJOR 和 ABS_MT_WIDTH_MAJOR 这两个消息上报触摸面积信息，关于 其他 ABS_MT 事件的具体含义大家可以查看 Linux 内核中的 multi-touch-protocol.txt 文档，这 里我们重点补充一下**ABS_MT_TOOL_TYPE** 事件。
+
+ABS_MT_TOOL_TYPE 事件用于上报触摸工具类型，很多内核驱动都不能区分出触摸设备 类 型 ，是 手指 还是 触摸 笔？ 这种 情况 下， 这个 事 件可 以忽 略掉 。目 前的 协议 支持 MT_TOOL_FINGER(手指)、MT_TOOL_PEN(笔)和 MT_TOOL_PALM(手掌)这三种触摸设备类 型，于 Type B 类 型 ， 此 事 件 由 input 子 系 统 内 核 处 理 。 如 果 驱 动 程 序 需 要 上 报 ABS_MT_TOOL_TYPE 事件，那么可以使用 **input_mt_report_slot_state** 函数来完成此工作。
+总结：MT 协议隶属于 linux 的 input 子系统，驱动通过大量的 ABS_MT 事件向 linux 内核上报多点触摸坐标数据。根据触摸IC的不同，分为Type A 和 Type B 两种类型，不同的类型其上报时序不同，目前使用最多的 是 Type B 类型。
+
+#### 多点触摸所使用到的API函数
+
+linux 下的多点触摸协议其实就是通过不同的事件来上报触摸 点坐标信息，这些事件都是通过 Linux 内核提供的对应 API 函数实现的
+
+1. input_mt_init_slots 函数
+
+   input_mt_init_slots 函数用于初始化 MT 的输入 slots，编写 MT 驱动的时候必须先调用此函 数初始化 slots，此函数定义在文件 drivers/input/input-mt.c 中，函数原型如下所示：
+   ![image-20231108143023800](D:\ZLinux\Linux_driver\image\117.png)
+
+2. input_mt_slot 函数
+
+   此函数用于 Type B 类型，此函数用于产生 ABS_MT_SLOT 事件，告诉内核当前上报的是 哪个触摸点的坐标数据，此函数定义在文件 include/linux/input/mt.h 中，函数原型如下所示：
+   ![image-20231108143206456](D:\ZLinux\Linux_driver\image\118.png)
+
+3. input_mt_report_slot_state 函数
+
+   此函数用于 Type B 类型，用于产生 ABS_MT_TRACKING_ID 和 ABS_MT_TOOL_TYPE 事 件 ， ABS_MT_TRACKING_ID 事 件 给 slot 关 联 一 个 ABS_MT_TRACKING_ID ， ABS_MT_TOOL_TYPE 事 件 指 定 触 摸 类 型 （ 是 笔 还 是 手 指 等 ）。 此 函 数 定 义 在 文 件 drivers/input/input-mt.c 中，此函数原型如下所示：
+   ![](D:\ZLinux\Linux_driver\image\119.png)
+
+4. input_report_abs 函数
+
+   Type A 和 Type B 类型都使用此函数上报触摸点坐标信息，通过 ABS_MT_POSITION_X 和 ABS_MT_POSITION_Y 事件实现 X 和 Y 轴坐标信息上报。此函数定义在文件 include/linux/input.h 中，函数原型如下所示：
+   ![image-20231108143455140](D:\ZLinux\Linux_driver\image\120.png)
+
+5. input_mt_report_pointer_emulation 函数
+
+   如果追踪到的触摸点数量多于当前上报的数量，驱动程序使用 BTN_TOOL_TAP 事件来通 知用户空间当前追踪到的触摸点总数量，然后调用 input_mt_report_pointer_emulation 函数将 use_count 参数设置为 false。否则的话将 use_count 参数设置为 true，表示当前的触摸点数量(此函数会获取到具体的触摸点数量，不需要用户给出)，此函数定义在文件 drivers/input/input-mt.c 中，函数原型如下：![image-20231108143602717](D:\ZLinux\Linux_driver\image\121.png)
+
+#### 多点电容触摸驱动框架
+
+linux 下多点电容触摸驱动的知识点
+
+1. 多点电容触摸芯片的接口，一般都为 I2C 接口，因此驱动主框架肯定是 I2C。
+2. linux 里面一般都是通过中断来上报触摸点坐标信息，因此需要用到中断框架。
+3. 多点电容触摸属于 input 子系统，因此还要用到 input 子系统框架。
+4. 在中断处理程序中按照 linux 的 MT 协议上报坐标信息。
+
+多点电容触摸驱动编写框架以及步骤如下：
+
+##### 1、I2C驱动框架
+
+驱动总体采用 I2C 框架：详见P1546.
+
+在i2c 驱动结构体中定义xxx_ts_probe函数，当触摸IC的设备节点与驱动匹配之后，其将运行，在这个函数中初始化触摸 IC，中断和 input 子系统等。
+
+##### 2、初始化触摸 IC、中断和 input 子系统
+
+初始化操作都是在 xxx_ts_probe 函数中完成。详见P1547
+
+1. 首先肯定是初始化触摸芯片，包括芯片的相关 IO，比如复位、中断等 IO 引脚， 然后就是芯片本身的初始化，也就是配置触摸芯片的相关寄存器。
+2. 因为一般触摸芯片都是通过中断来向系统上报触摸点坐标信息的，因此我们需要 初始化中断，这里又和第五十一章内容结合起来了。大家可能会发现第 9 行并没有使用 request_irq 函数申请中断，而是采用了 devm_request_threaded_irq 这个函数，为什么使用这个函 数呢？是不是 request_irq 函数不能使用？答案肯定不是的，这里用 request_irq 函数是绝对没问 题的。
+   devm_request_threaded_irq 函数特点如下：
+   1、用于申请中断，作用和 request_irq 函数类似。
+   2、此函数的作用是中断线程化， 中断线程优化详见P1549
+
+##### 3、上报坐标信息
+
+最后就是在中断服务程序中上报读取到的坐标信息，根据所使用的多点电容触摸设备类型 选择使用 Type A 还是 Type B 时序。由于大多数的设备都是 Type B 类型，因此这里就以 Type B 类型为例讲解一下上报过程：
+
+```c
+static irqreturn_t xxx_handler(int irq, void *dev_id)
+{
+	int num; /* 触摸点数量 */
+	int x[n], y[n]; /* 保存坐标值 */
+	
+	/* 1、从触摸芯片获取各个触摸点坐标值 */
+	......
+	
+	/* 2、上报每一个触摸点坐标 */
+	for (i = 0; i < num; i++) {
+		input_mt_slot(input, id);
+		input_mt_report_slot_state(input, MT_TOOL_FINGER, true);
+		input_report_abs(input, ABS_MT_POSITION_X, x[i]);
+		input_report_abs(input, ABS_MT_POSITION_Y, y[i]);
+	}
+	......
+	
+	input_sync(input);
+	......
+	
+	return IRQ_HANDLED;
+ }
+```
+
+进入中断处理程序以后首先肯定是从触摸 IC 里面读取触摸坐标以及触摸点数量，假设触摸点数量保存到 num 变量，触摸点坐标存放到 x，y 数组里面。
+

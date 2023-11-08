@@ -6,7 +6,9 @@
 	],
 	"settings": {
 		"files.associations": {
-			"fcntl.h": "c"
+			"fcntl.h": "c",
+			"of.h": "c",
+			"of_address.h": "c"
 		}
 	}
 }
