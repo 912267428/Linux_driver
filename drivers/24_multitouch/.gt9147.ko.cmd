@@ -1,0 +1,1 @@
+cmd_/home/rodney/Desktop/Linux_driver/drivers/24_multitouch/gt9147.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/rodney/Desktop/Linux_driver/drivers/24_multitouch/gt9147.ko /home/rodney/Desktop/Linux_driver/drivers/24_multitouch/gt9147.o /home/rodney/Desktop/Linux_driver/drivers/24_multitouch/gt9147.mod.o

@@ -6,8 +6,9 @@
 	],
 	"settings": {
 		"files.associations": {
-			"fcntl.h": "c",
-			"gpio.h": "c"
+			"module.h": "c",
+			"uaccess.h": "c",
+			"preempt.h": "c"
 		}
 	}
 }
