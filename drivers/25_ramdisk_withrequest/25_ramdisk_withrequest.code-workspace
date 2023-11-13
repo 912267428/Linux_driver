@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"module.h": "c",
+			"uaccess.h": "c",
+			"preempt.h": "c",
+			"timer.h": "c",
+			"stringify.h": "c"
+		}
+	}
+}
