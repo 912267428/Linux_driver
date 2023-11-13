@@ -2857,3 +2857,877 @@ static irqreturn_t xxx_handler(int irq, void *dev_id)
 
 进入中断处理程序以后首先肯定是从触摸 IC 里面读取触摸坐标以及触摸点数量，假设触摸点数量保存到 num 变量，触摸点坐标存放到 x，y 数组里面。
 
+### Linux音频驱动
+
+#### WM8960
+
+WM8960 是一颗由 wolfson(欧胜)公司出品的音频编解码芯片，是一颗低功耗、高质量的立 体声音频 CODEC。集成 D 类喇叭功放，每个通道可以驱动一个 1W 喇叭(8Ω)。内部集成 3 个 立体声输入源，可以灵活配置，拥有一路完整的麦克风接口。WM8960 内部 ADC 和 DAC 都为 24 位，WM8960 主要特性如下所示:
+
+1. DAC 的 SNR(信噪比)为 98dB，3.3V、48KHz 下 THD(谐波失真)为-84dB。
+2. ADC 的 SNR(信噪比)为 94dB，3.3V、48KHz 下 THD(谐波失真)为-82dB。
+3. 3D 增强。
+4. 立体声 D 类功放，可以直接外接喇叭，8Ω负载下每通道 1W。
+5. 集成耳机接口。
+6. 集成麦克风接口。
+7. 采样率支持 8K、11.025K、12K、16K、22.05K、24K、32K、44.1K 和 48K。
+
+WM8960 整体框图如图 所示：
+![image-20231109142628370](D:\ZLinux\Linux_driver\image\122.png)
+
+#### I2S总线接口
+
+I2S(Inter-IC Sound)总线有时候也写作 IIS，I2S 是飞利浦公司提出的一种用于数字音频设备 之间进行音频数据传输的总线。和 I2C、SPI 这些常见的通信协议一样，I2S 总线用于主控制器和音频 CODEC 芯片之间传输音频数据。因此，要想使用 I2S 协议，主控制器和音频 CODEC 都 得支持 I2S 协议，I.MX6ULL 的 SAI 外设就支持 I2S 协议，WM8960 同样也支持 I2S，所以本章 实验就是使用 I2S 协议来完成的。I2S 接口需要 3 根信号线(如果需要实现收和发，那么就要 4 根信号线，收和发分别使用一根信号线)：
+
+- **SCK**：串行时钟信号，也叫做位时钟(BCLK)，音频数据的每一位数据都对应一个 SCK，立 体声都是双声道的，因此 SCK=2×采样率×采样位数。比如采样率为 44.1KHz、16 位的立体声 音频，那么 SCK=2×44100×16=1411200Hz=1.4112MHz。
+- **WS**：字段(声道)选择信号，也叫做 LRCK，也叫做帧时钟，用于切换左右声道数据，WS 为 “1”表示正在传输左声道的数据，WS 为“0”表示正在传输右声道的数据。WS 的频率等于采样率，比如采样率为 44.1KHz 的音频，WS=44.1KHz。
+- **SD**：串行数据信号，也就是我们实际的音频数据，如果要同时实现放音和录音，那么就需要 2 根数据线，比如 WM8960 的 ADCDAT 和 DACDAT，就是分别用于录音和放音。不管音频数据是多少位的，**数据的最高位都是最先传输的**。数据的最高位总是出现在一帧开始后(LRCK 变化)的第 2 个 SCK 脉冲处。
+
+另外，有时候为了使音频 CODEC 芯片与主控制器之间能够更好的同步，会引入另外一个 叫做 MCLK 的信号，也叫做主时钟或系统时钟，一般是采样率的 256 倍或 384 倍。
+
+随着技术的发展，在统一的 I2S 接口下，出现了不同的数据格式，根据 DATA 数据相 对于 LRCK 和 SCLK 位置的不同，出现了 LeftJustified(左对齐)和 RightJustified(右对齐)两种格式:
+![image-20231109143458649](D:\ZLinux\Linux_driver\image\123.png)
+
+#### IMX6ULL SAI
+
+音频 CODEC 支持 I2S 协议，那么主控制器也必须支持 I2S 协议。I.MX6ULL 也提供了一个叫做 SAI 的外设，全称为 SynchronousAudio Interface，翻译 过来就是同步音频接口。
+I.MX6ULL 的 SAI 是一个全双工、支持帧同步的串行接口，支持 I2S、AC97、TDM 和音频 DSP，SAI 主要特性如下：
+
+1. 帧最大为 32 个字。
+2. 字大小可选择 8bit 或 32bit。
+3. 每个接收和发送通道拥有 32×32bit 的 FIFO。
+4. FIFO 错误以后支持平滑重启。
+
+I.MX6ULL 的 SAI 框图如图：
+![image-20231109144300223](D:\ZLinux\Linux_driver\image\124.png)
+
+右侧“SAI_TX”和“SAI_RX”开头的就是 SAI 外设提供给外部连接音频 CODEC 的信号线
+
+开发板音频原理图：
+![image-20231109144427757](D:\ZLinux\Linux_driver\image\125.png)
+
+重点关注两个接口，SAI 和 I2C：
+
+1. SAI 接口一共用到了 6 根数据线，这 6 根数据线用于 I.MX6ULL 与 WM8960 之间的音 频数据收发。
+2. WM8960 在使用的时候需要进行配置，配置接口为 I2C，V2.4 以前版本连接到了 I.MX6ULL 的 I2C2 上，V2.4 及以后版本连接到了 I2C1 上
+
+#### 驱动使能
+
+NXP 官方已经写好了 WM8960 驱动，因此我们直接配置内核使能 WM8960 驱动即可。
+
+### Linux CAN总线驱动
+
+《CAN 入门教程》：4、参考资料->CAN 入门教程.pdf
+
+#### 简介
+
+CAN 的全称为 Controller Area Network，也就是控制局域网络，简称为 CAN。CAN 最早是 由德国 BOSCH(博世)开发的，目前已经是国际标准(ISO 11898)，是当前应用最广泛的现场总线 之一。BOSCH 主要是做汽车电子的，因此 CAN 一开始主要是为汽车电子准备的，事实也是如 此，CAN 协议目前已经是汽车网络的标准协议。当然了，CAN 不仅仅应用于汽车电子，经过 几十年的发展，CAN 协议的高性能和高可靠性已经得到了业界的认可，目前除了汽车电子以外 也广泛应用于工业自动化、医疗、工业和船舶等领域。
+
+以汽车电子为例，汽车上有空调、车门、发动机、大量传感器等，这些部件都是通过 CAN 总线连在一起形成一个网络。如图所示：
+![image-20231110121210611](D:\ZLinux\Linux_driver\image\126.png)
+
+各个单元通过 CAN 总线连接在一起，每个单元都是独立的 CAN 节点。同一 个 CAN 网络中所有单元的通信速度必须一致，**不同的网络之间通信速度可以不同**。比如图中 125Kbps 的 CAN 网络下所有的节点速度都是 125Kbps 的，整个网络由一个网关与其 他的网络连接。
+
+CAN 的特点主要有一下几点：
+
+1. **多主控制**
+
+   在总线空闲时，所有单元都可以发送消息（多主控制），而两个以上的单元同时开始发送消 息时，根据标识符（Identifier 以下称为 ID）决定优先级。ID 并不是表示发送的目的地址，而 是表示访问总线的消息的优先级。两个以上的单元同时开始发送消息时，对各消息 ID 的每个 位进行逐个仲裁比较。仲裁获胜（被判定为优先级最高）的单元可继续发送消息，仲裁失利的 单元则立刻停止发送而进行接收工作。
+
+2. **系统的柔软性**
+
+   与总线相连的单元没有类似于“地址”的信息。因此在总线上增加单元时，连接在总线上的其它单元的软硬件及应用层都不需要改变。
+
+3. **通信速度快，距离远**
+
+   最高 1Mbps（距离小于 40M），最远可达 10KM（速率低于 5Kbps）。
+
+4. **具有错误检测、错误通知和错误恢复功能**
+
+   所有单元都可以检测错误（错误检测功能），检测出错误的单元会立即同时通知其他所有单 元（错误通知功能），正在发送消息的单元一旦检测出错误，会强制结束当前的发送。强制结束 发送的单元会不断反复地重新发送此消息直到成功发送为止（错误恢复功能）。
+
+5. **故障封闭功能**
+
+   CAN 可以判断出错误的类型是总线上暂时的数据错误（如外部噪声等）还是持续的数据错 误（如单元内部故障、驱动器故障、断线等）。由此功能，当总线上发生持续数据错误时，可将 引起此故障的单元从总线上隔离出去。
+
+6. **连接节点多**
+
+   CAN 总线是可同时连接多个单元的总线。可连接的单元总数理论上是没有限制的。但实际 上可连接的单元数受总线上的时间延迟及电气负载的限制。降低通信速度，可连接的单元数增 加；提高通信速度，则可连接的单元数减少。
+
+#### CAN电器属性
+
+CAN 总线使用两根线来连接各个单元：CAN_H 和 CAN_L
+CAN 控制器通过判断这两根 线上的电位差来得到总线电平，CAN 总线电平分为显性电平和隐性电平两种。显性电平表示逻 辑“0”，此时 CAN_H 电平比 CAN_L 高，分别为 3.5V 和 1.5V，电位差为 2V。隐形电平表示 逻辑“1”，此时 CAN_H 和 CAN_L 电压都为 2.5V 左右，电位差为 0V。CAN 总线就通过显性 和隐形电平的变化来将具体的数据发送出去。如图：
+![image-20231110140032065](D:\ZLinux\Linux_driver\image\127.png)
+
+CAN 总线上没有节点传输数据的时候一直处于隐性状态，也就是说总线空闲状态的时候一 直处于隐性。CAN 网络中的所有单元都通过 CAN_H 和 CAN_L 这两根线连接在一起
+
+CAN 总线两端要各接一个 120Ω的端接电阻，用于匹配总线阻抗， 吸收信号反射及回拨，提高数据通信的抗干扰能力以及可靠性。
+
+CAN 总线传输速度可达 1Mbps/S，最新的 CAN-FD 最高速度可达 5Mbps/S，甚至更高，CAN 传输速度和总线距离有关， 总线距离越短，传输速度越快。
+
+#### CAN协议
+
+通过 CAN 总线传输数据是需要按照一定协议进行的，CAN 协议提供了 5 种帧格式来传输 数据：**数据帧、遥控帧、错误帧、过载帧和帧间隔**。
+其中数据帧和遥控帧有标准格式和扩展格式两种，标准格式有 11 位标识符(ID)，扩展格式有 29 个标识符(ID)。这 5 中帧的用途见表
+
+| 帧类型 |                      帧用途                      |
+| :----: | :----------------------------------------------: |
+| 数据帧 |      用于 CAN 节点单元之间进行数据传输的帧       |
+| 遥控帧 | 用于接收单元向具有相同 ID 的发送单元请求数据的帧 |
+| 错误帧 |     用于当检测出错误时向其它单元通知错误的帧     |
+| 过载帧 |      用于接收单元通知其尚未做好接收准备的帧      |
+| 间隔帧 |    用于将数据帧及遥控帧与前面的帧分离开来的帧    |
+
+##### 数据帧
+
+数据帧由 7 段组成：
+
+1. **帧起始**，表示数据帧开始的段。
+
+   帧起始很简单，标准格式和扩展格式都是由一个位的显性电平 0 来表示帧起始。
+
+2. **仲裁段**，表示该帧优先级的段。
+
+   仲裁段表示帧优先级
+
+3. **控制段**，表示数据的字节数及保留位的段。
+
+4. **数据段**，数据的内容，一帧可发送 0~8 个字节的数据。
+
+5. **CRC 段**，检查帧的传输错误的段。
+
+6. **ACK 段**，表示确认正常接收的段。
+
+7. **帧结束**，表示数据帧结束的段。
+
+帧结构：
+![image-20231110140720481](D:\ZLinux\Linux_driver\image\128.png)
+
+**仲裁段：**
+仲裁段表示帧优先级，仲裁段结构如图
+![image-20231110141010545](D:\ZLinux\Linux_driver\image\129.png)
+
+标准格式和扩展格式的仲裁段不同。标准格式的 ID 为 11 位，发 送顺序是从 ID10 到 ID0，最高 7 位 ID10~ID4 不能全为隐性(1)，也就是禁止 0X1111111XXXXX这样的 ID。扩展格式的 ID 为 29 位，基本 ID 从 ID28 到 ID18，扩展 ID 由 ID17 到 ID0，基本 ID 与标准格式一样，**禁止最高 7 位都为隐性**。
+
+**控制段**
+
+控制段由 6 个位构成，表示数据段的字节数，标准格式和扩展格式的控制段略有不同，如
+![image-20231110142725311](D:\ZLinux\Linux_driver\image\130.png)
+
+图 中 r1 和 r0 为保留位，保留位必须以显性电平发送。DLC 为数据长度，高位在 前，DLC 段有效值范围为 0~8。
+
+**数据段**
+
+数据段也就是帧的有效数据，标准格式和扩展格式相同，可以包含 0~8 个字节的数据，从 **最高位(MSB)开始发送**：
+![image-20231110142904832](D:\ZLinux\Linux_driver\image\131.png)
+
+图 中数据段的 0~64 为 bit，对应到字节就是 0~8 字节。
+
+**CRC段**
+
+CRC 段保存 CRC 校准值，用于检查帧传输错误，标准格式和扩展格式相同：
+![image-20231110143113699](D:\ZLinux\Linux_driver\image\132.png)
+
+CRC 段由 15 位的 CRC 值与 1 位的 CRC 界定符组成。CRC 值的 计算范围包括：帧起始、仲裁段、控制段、数据段，接收方以同样的算法进行计算，然后用计 算得到的 CRC 值与此 CRC 段进行比较，如果不一致的话就会报错。
+
+**ACK 段**
+
+ACK 段用来确认接收是否正常，标准格式和扩展格式相同，ACK 段结构如图
+![image-20231110143712568](D:\ZLinux\Linux_driver\image\133.png)
+
+ACK 段由 ACK 槽(ACK Slot)和 ACK 界定符两部分组成。发送单 元的 ACK，发送 2 个隐性位，而接收到正确消息的单元在 ACK 槽（ACK Slot）发送显性位， 通知发送单元正常接收结束，这个过程叫发送 ACK/返回 ACK。发送 ACK 的是所有接收单元 中接收到正常消息的单元，所谓正常消息是指不含填充错误、格式错误、CRC 错误的消息，这 些接收单元既不处于总线关闭态也不处于休眠态的所有接收单元中。
+
+**帧结束**
+
+最后就是帧结束段，标准格式和扩展格式相同
+
+![image-20231110144119960](D:\ZLinux\Linux_driver\image\134.png)
+
+帧结束段很简单，由 7 位隐性位构成。
+
+##### 遥控帧
+
+接收单元向发送单元请求数据的时候就用遥控帧，遥控帧由 6 个段组成：
+
+1. 帧起始，表示数据帧开始的段。
+2. 仲裁段，表示该帧优先级的段。
+3. 控制段，表示数据的字节数及保留位的段。
+4. CRC 段，检查帧的传输错误的段。
+5. ACK 段，表示确认正常接收的段。
+6. 帧结束，表示数据帧结束的段。
+
+![image-20231110144229745](D:\ZLinux\Linux_driver\image\135.png)
+
+遥控帧结构基本和数据帧一样，最主要的区别就是遥控帧没有数 据段。遥控帧的 RTR 位为隐性的，数据帧的 RTR 位为显性，因此可以通过 RTR 位来区分遥控 帧和没有数据的数据帧。遥控帧没有数据，因此 DLC 表示的是所请求的数据帧数据长度，遥控 帧的其他段参考数据帧的描述即可。
+
+##### 错误帧
+
+当接收或发送消息出错的时候使用错误帧来通知，错误帧由**错误标志**和**错误界定符**两部分组成
+
+![image-20231110144431122](D:\ZLinux\Linux_driver\image\136.png)
+
+错误标志有**主动错误标志**和**被动错误标志**两种，主动错误标志是 6 个显性位，被动错误标志是 6 个隐性位，错误界定符由 8 个隐性位组成。
+
+##### 过载帧
+
+接收单元尚未完成接收准备的话就会发送过载帧，过载帧由过载标志和过载界定符构成：
+
+![image-20231110144951562](D:\ZLinux\Linux_driver\image\137.png)
+
+过载标志由 6 个显性位组成，与主动错误标志相同，过载界定符由 8 个隐性位组成，与错 误帧中的错误界定符构成相同。
+
+##### 帧间隔
+
+帧间隔用于分隔数据帧和遥控帧，数据帧和遥控帧可以通过插入帧间隔来将本帧与前面的任何帧隔开，**过载帧和错误帧前不能插入帧间隔**
+
+![image-20231110145246762](D:\ZLinux\Linux_driver\image\138.png)
+
+#### CAN速率
+
+CAN 总线以帧的形式发送数据，但是最终到总线上的就是“0”和“1”这样的二进制数据， 这里就涉及到了通信速率，也就是每秒钟发送多少位数据，前面说了 CAN2.0 最高速度为 1Mbps/S。对于 CAN 总线，一个位分为 4 段：
+
+1. 同步段(SS)
+2. 传播时间段(PTS)
+3. 相位缓冲段 1(PBS1)
+4. 相位缓冲段 2(PBS2)
+
+这些段由 Tq(Time Quantum)组成，Tq 是 CAN 总线的最小时间单位。帧由位构成，一个位 由 4 个段构成，每个段又由若干个 Tq 组成，这个就是位时序。
+1 位由多少个 Tq 构成、每个段 又由多少个 Tq 构成等，可以任意设定位时序。通过设定位时序，多个单元可同时采样，也可 任意设定采样点。各段的作用和 Tq 数如图 
+![image-20231110145504807](D:\ZLinux\Linux_driver\image\139.png)
+
+![image-20231110151630139](D:\ZLinux\Linux_driver\image\140.png)
+
+图中的采样点是指读取总线电平，并将读到的电平作为位值的点。位置在PBS1 结束处。根据这个位时序，我们就可以计算 CAN 通信的波特率了。
+
+##### CAN总序仲裁功能
+
+在总线空闲态，最先开始发送消息的单元获得发送权。
+
+当多个单元同时开始发送时，各发送单元从仲裁段的第一位开始进行仲裁。连续输出显性电平最多的单元可继续发送。
+
+![image-20231110152103281](D:\ZLinux\Linux_driver\image\141.png)
+
+单元 1 和单元 2 同时开始向总线发送数据123，开始部分他们的数据格式是一 样的，故无法区分优先级，直到 T 时刻，单元 1 输出隐性电平，而单元 2 输出显性电平，此时 单元 1 仲裁失利，立刻转入接收状态工作，不再与单元 2 竞争，而单元 2 则顺利获得总线使用 权，继续发送自己的数据。这就实现了仲裁，让连续发送显性电平多的单元获得总线使用权。
+
+#### IMX6ULL FlexCAN简介
+
+I.MX6ULL 带有 CAN 控制器外设，叫做 FlexCAN，FlexCAN 符合 CAN2.0B 协议。FlexCAN 完全符合CAN协议，支持标准格式和扩展格式，支持 64个消息缓冲。I.MX6ULL自带的FlexCAN 模块特性如下：
+
+1. 支持 CAN2.0B 协议，数据帧和遥控帧支持标准和扩展两种格式，数据长度支持 0~8 字 节，可编程速度，最高 1Mbit/S。
+
+2. 灵活的消息邮箱，最高支持 8 个字节。
+
+3. 每个消息邮箱可以配置为接收或发送，都支持标准和扩展这两种格式的消息。
+
+4. 每个消息邮箱都有独立的接收掩码寄存器。
+
+5. 强大的接收 FIFO ID 过滤。
+
+6. 未使用的空间可以用作通用 RAM。
+
+7. 可编程的回测模式，用于进行自测。
+
+8. 可编程的优先级组合。
+
+   。。。。。。
+
+FlexCAN 支持四种模式：正常模式(Normal)、冻结模式(Freeze)、仅监听模式(Listen-Only)和 回环模式(Loop-Back)，另外还有两种低功耗模式：禁止模式(Disable)和停止模式(Stop)。
+
+1. **正常模式(Normal)**
+
+   在正常模式下，FlexCAN 正常接收或发送消息帧，所有的 CAN 协议功能都使能。
+
+2. **冻结模式(Freeze)**
+
+   当 MCR 寄存器的 FRZ 位置 1 的时候使能此模式，在此模式下无法进行帧的发送或接收， CAN 总线同步丢失。
+
+3. **仅监听模式(Listen-Onley)**
+
+   当 CTRL 寄存器的 LOM 位置 1 的时候使能此模式，在此模式下帧发送被禁止，所有错误 计数器被冻结，CAN 控制器工作在被动错误模式，此时只会接收其他 CAN 单元发出的 ACK 消 息。
+
+4. **回环模式(Loop-Back)**
+
+   当 CTRL 寄存器的 LPB 位置 1 的时候进入此模式，此模式下 FlexCAN 工作在内部回环模 式，一般用来进行自测。从模式下发送出来的数据流直接反馈给内部接收单元。
+
+   前面在讲解 CAN 协议的时候说过 CAN 位时序，FlexCAN 支持 CAN 协议的这些位时序， 控制寄存器 CTRL 用于设置这些位时序，CTRL 寄存器中的 PRESDIV、PROPSEG、PSEG1、 PSEG2 和 RJW 这 5 个位域用于设置 CAN 位时序。
+   PRESDIV 为 CAN 分频值，也即是设置 CAN 协议中的 Tq 值，公式如下：
+   ![image-20231110153632453](D:\ZLinux\Linux_driver\image\142.png)
+
+   ![image-20231110153654360](D:\ZLinux\Linux_driver\image\143.png)
+
+FlexCAN 的 CAN 位时序如图：
+![image-20231110153849668](D:\ZLinux\Linux_driver\image\144.png)
+
+SYNC+SEG+(PROP_SEG+PSEG1+2)+(PSEG2+1)就是总的 Tq，因此 FlexCAN 的波特率就是：
+
+![image-20231110153921384](D:\ZLinux\Linux_driver\image\145.png)
+
+#### 硬件原理图分析
+
+正点原子 I.MX6U-ALPHA 开发板 CAN 接口原理图如图 66.2.1 所示：
+![image-20231110154056030](D:\ZLinux\Linux_driver\image\146.png)
+
+CAN1_TX 和 CAN1_RX 是 I.MX6ULL FlexCAN1 的发送和接收引脚，对应 I.MX6ULL 的 UART3_CTS 和 UART3_RTS 这两个引脚。TJA1050 是 CAN 收发器，通过 TJA1050 向外界提供 CAN_H 和 CAN_L 总线，R10 是一个 120 欧的端接匹配电阻。
+
+### Linux USB驱动
+
+#### USB接口文档：
+
+USB 详细的协议内容请参考《USB2.0 协议中文版.pdf》和《USB3.0 协议中文版.pdf》，在4、参考资料中
+
+#### 什么是USB？
+
+USB 全称为 Universal Serial Bus，翻译过来就是通用串行总线。由英特尔与众多电脑公司 提出来，用于规范电脑与外部设备的连接与通讯。目前 USB 接口已经得到了大范围的应用，已 经是电脑、手机等终端设备的必配接口，甚至取代了大量的其他接口。比如最新的智能手机均 采用 USB Typec 取代了传统的 3.5mm 耳机接口，苹果最新的 MacBook 只有 USB Typec 接口， 至于其他的 HDMI、网口等均可以通过 USB Typec 扩展坞来扩展。
+
+按照大版本划分，USB 目前可以划分为 USB1.0、USB2.0、USB3.0 以及即将到来的 USB4.0。
+
+- **USB1.0：**USB 规范于 1995 年第一次发布，由 Inter、IBM、Microsoft 等公司组成的 USB-IF(USB Implement Forum)组织提出。USB-IF 于 1996 年正式发布 USB1.0，理论速度为 1.5Mbps。1998 年 USBIF 在 USB1.0 的基础上提出了 USB1.1 规范。
+- **USB2.0**:USB2.0 依旧由 Inter、IBM、Microsoft 等公司提出并发布，USB2.0 分为两个版 本:Full-Speed 和 High-Speed，也就是全速(FS)和高速(HS)。USB2.0 FS 的速度为 12Mbps，USB2.0  HS 速度为 480Mbps。目前大多数单片机以及低端 Cortex-A 芯片配置的都是 USB2.0 接口，比 如 STM32 和 ALPHA 开发板所使用的 I.MX6ULL。USB2.0 全面兼容 USB1.0 标准。
+- **USB3.0:**USB3.0 同样有 Inter 等公司发起的，USB3.0 最大理论传输速度为 5.0Gbps，USB3.0 引入了全双工数据传输，USB2.0 的 480Mbps 为半双工。USB3.0 中两根线用于发送数据，另外 两根用于接收数据。在 USB3.0 的基础上又提出了 USB3.1、USB3.2 等规范，USB3.1 理论传输 速度提升到了 10Gbps，USB3.2 理论传输速度为 20Gbps。为了规范 USB3.0 标准的命名，USBIF 公布了最新的 USB 命名规范，原来的 USB3.0 和 USB3.1 命名将不会采用，所有的 3.0 版本 的 USB 都命名为 USB3.2，以前的 USB3.0、USB3.1 和 USB3.2 分别叫做 USB3.2 Gen1、USB3.2  Gen2、USB3.2 Gen 2X2。
+- **USB4.0**:"目前还在标准定制中，目前还没有设备搭载，据说是在 Inter 的雷电接口上改进而 来。USB4.0 的速度将提升到了 40Gbps，最高支持 100W 的供电能力，只需要一根线就可以完 成数据传输与供电，极大的简化了设备之间的链接线数，期待 USB4.0 设备上市。
+
+#### USB电器特性：
+
+Mini USB 线一般都是一头为 USB A 插头，一头为 Mini USB 插头。一共有四个触点，也就是 4 根线，这四根线的顺序如图所示：
+![image-20231112154525623](D:\ZLinux\Linux_driver\image\147.png)
+
+USB A 插头从左到右线序依次为 1,2,3,4，第 1 根线为 VBUS，电压为 5V，第 2 根线为 D-，第 3 根线为 D+，第 4 根线为 GND。
+USB 采用差分信号来传输数据，因 此有 D-和 D+两根差分信号线。大家仔细观察的话会发现 USB A 插头的 1 和 4 这两个触点比较 长，2 和 3 这两个触点比较短。1 和 4 分别为 VBUS 和 GND，也就是供电引脚，当插入 USB 的 时候会先供电，然后再接通数据线。拔出的时候先断开数据线，然后再断开电源线。
+
+Mini USB 插头有 5 个触点，也就是 5 根线，线序 从左往右依次是 1~5。第 1 根线为 VCC(5V)，第 2 根线为 D-，第 3 根线为 D+，第 4 根线为 ID， 第 5 根线为 GND。可以看出 Mini USB 插头相比 USB A 插头多了一个 ID 线，这个 ID 线用于 实现 **OTG** 功能，通过 ID 线来判断当前连接的是主设备(HOST)还是从设备(SLAVE)。
+
+USB 是一种支持热插拔的总线接口，使用差分线(D-和 D+)来传输数据，USB 支持两种供 电模式：总线供电和自供电，总线供电就是由 USB 接口为外部设备供电，在 USB2.0 下，总线 供电最大可以提供 500mA 的电流。
+
+#### USB拓扑结构
+
+USB 是主从结构的，也就是分为主机和从机两部分，一般主机叫做 Host，从机叫做 Device。 主机就是提供 USB A 插座来连接外部的设备，比如电脑作为主机，对外提供 USB A 插座，我 们可以通过 USB 线来连接一些 USB 设备，比如声卡、手机等。因此电脑带的 USB A 插座数量 就决定了你能外接多少个 USB 设备，如果不够用的话我们可以购买 USB 集线器来扩展电脑的 USB 插口，USB 集线器也叫做 USB HUB
+
+虽然我们可以对原生的 USB 口数量进行扩展，但是我们不能对原生 USB 口的带宽进行扩 展，比如 I.MX6ULL 的两个原生 USB 口都是 USB2.0 的，带宽最大为 480Mbps，因此接到下面的所有 USB 设备总带宽最大为 480Mbps。
+
+USB 只能主机与设备之间进行数据通信，USB 主机与主机、设备与设备之间是不能通信的。 因此两个正常通信的 USB 接口之间必定有一个主机，一个设备。为此使用了不同的插头和插座 来区分主机与设备，比如主机提供 USB A 插座，从机提供 Mini USB、Micro USB 等插座。在 一个 USB 系统中，仅有一个 USB 主机，但是可以有多个 USB 设备，包括 USB 功能设备和 USB  HUB，最多支持 127 个设备。一个 USB 主控制器支持 128 个地址，地址 0 是默认地址，只有在 设备枚举的时候才会使用，地址 0 不会分配给任何一个设备。所以一个 USB 主控制器最多可以 分配 127 个地址。整个 USB 的拓扑结构就是一个分层的金字塔形，如图：
+![image-20231112164609659](D:\ZLinux\Linux_driver\image\148.png)
+
+可以看出从 Root Hub 开始，一共有 7 层，金字塔顶部是 Root Hub，这个是 USB 控制器内部的。图中的 Hub 就是连接的 USB 集线器，Func 就是具体的 USB 设备。
+
+USB 主机和从机之间的通信通过管道(Pipe)来完成，管道是一个逻辑概念，任何一个 USB 设备一旦上电就会存在一个管道，也就是默认管道，USB 主机通过管道来获取从机的描述符、 配置等信息。在主机端管道其实就是一组缓冲区，用来存放主机数据，在设备端管道对应一个 特定的端点。
+
+#### 什么是USB OTG
+
+USB 分为 HOST(主机)和从机(或 DEVICE)，有些设备可能有时候需要做 HOST，有时候又需要做 DEVICE，配两个 USB 口当然可以实现，但是太浪费资源了。如果一 个 USB 接口既可以做 HOST 又可以做 DEVICE 那就太好了，使用起来就方便很多。为此，USB  OTG 应运而生，OTG 是 On-The-Go 的缩写，支持 USB OTG 功能的 USB 接口既可以做 HOST， 也可以做 DEVICE。那么问题来了，一个 USB 接口如何知道应该工作在 HOST 还是 DEVICE 呢？这里就引入了 ID 线这个概念，前面讲解 USB 电气属性的时候已经说过了，Mini USB 插头 有 5 根线，其中一条就是 ID 线。ID 线的高低电平表示 USB 口工作在 HOST 还是 DEVICE 模 式：
+
+**ID=1：OTG 设备工作在从机模式。 ID=0：OTG 设备工作在主机模式。**
+
+支持 OTG 模式的 USB 接口一般都是那些带有 ID 线的接口，比如正点原子的ALPHA 开发板的 USB_OTG 接口就是支持 OTG 模式的，USB_OTG 连接到了 I.MX6ULL 的 USB1 接口上。
+
+如果只有一个 Mini USB 或者 Type-C USB 接口的话如果要使用 OTG 的主机模 式，那么就需要一根 OTG 线。可以看出，不管是 Mini USB OTG 还是 Type-C USB OTG 线，一头都是 USB A 插座，另外 一头是 Mini USB 或者 Type-C USB 插头，将 Mini USB 或者 Type-C USB 插头插入机器的 Mini USB 或 Type-C 接口上，需要连接的 USB 设备插到另一端的 USB A 插座上，比如 U 盘啥的。 USB OTG 线会将 ID 线拉低，这样机器就知道自己要做为一个主机，用来连接外部的从机设备 (U 盘)。
+
+#### IMX6ULL USB接口简介
+
+I.MX6ULL 内部集成了两个独立的 USB 控制器，这两个 USB 控制器都支持 OTG 功能。 I.MX6ULL 内部 USB 控制器特性如下：
+
+1. 有两个 USB2.0 控制器内核分别为 Core0 和 Core1，这两个 Core 分别连接到 OTG1 和 OTG2。
+2. 两个 USB2.0 控制器都支持 HS、FS 和 LS 模式，不管是主机还是从机模式都支持 HS/FS/LS，硬件支持 OTG 信号、会话请求协议和主机协商协议，支持 8 个双向端点
+3. 支持低功耗模式，本地或远端可以唤醒。
+4. 每个控制器都有一个 DMA。
+
+每个 USB 控制器都有两个模式：正常模式(normal mode)和低功耗模式(low power mode)。
+
+每个 USB OTG 控制器都可以运行在高速模式(HS 480Mbps)、全速模式(LS 12Mbps)和低速模式 (1.5Mbps)。正常模式下每个 OTG 控制器都可以工作在主机(HOST)或从机(DEVICE)模式下，每 个 USB 控制器都有其对应的接口。低功耗模式顾名思义就是为了节省功耗，USB2.0 协议中要 求，设备在上行端口检测到空闲状态以后就可以进入挂起状态。在从机(DEVICE)模式下，端口 停止活动 3ms 以后 OTG 控制器内核进入挂起状态。在主机(HOST)模式下，OTG 控制器内核不 会自动进入挂起状态，但是可以通过软件设置。不管是本地还是远端的 USB 主从机都可以通过 产生唤醒序列来重新开始 USB 通信。
+
+两个 USB 控制器都兼容 EHCI，这里我们简单提一下 OHCI、UHCI、EHCI 和 xHCI，这三 个是用来描述 USB 控制器规格的，区别如下：
+
+- **OHCI**：全称为 Open Host Controller Interface，这是一种 USB 控制器标准，厂商在设计 USB 控制器的时候需要遵循此标准，用于 USB1.1 标准。OHCI 不仅仅用于 USB，也支持一些其他的 接口，比如苹果的 Firewire 等，OHCI 由于硬件比较难，所以软件要求就降低了，软件相对来说 比较简单。OHCI 主要用于非 X86 的 USB，比如扩展卡、嵌入式 USB 控制器。
+- **UHCI：**全称是 Universal Host Controller Interface，UHCI 是 Inter 主导的一个用于 USB1.0/1.1 的标准，与 OHCI 不兼容。与 OHCI 相比 UHCI 硬件要求低，但是软件要求相应就高了，因此 硬件成本上就比较低。
+- **EHCI：**全称是 Enhanced Host Controller Interface，是 Inter 主导的一个用于 USB2.0 的 USB 控制器标准。I.MX6ULL 的两个 USB 控制器都是 2.0 的，因此兼容 EHCI 标准。EHCI 仅提供 USB2.0 的高速功能，至于全速和低速功能就由 OHCI 或 UHCI 来提供。
+- **xHCI：**全称是 eXtensible Host Controller Interface，是目前最流行的 USB3.0 控制器标准， 在速度、能效和虚拟化等方面比前三个都有较大的提高。xHCI 支持所有速度种类的 USB 设备， xHCI 出现的目的就是为了替换前面三个。
+
+#### 正点原子开发板USB HUB 原理图分析
+
+使用 SL2.1A 这个 HUB 芯片将 I.MX6ULL 的 USB  OTG2 扩展成了 4 路 HOST 接口，其中一路供 4G 模块使用，因此就剩下了三个通用的 USB A 插座，原理图如图
+
+![image-20231112180828179](D:\ZLinux\Linux_driver\image\149.png)
+
+**使用 GL850G 扩展出来的 4 路 USB 接口只能用作 HOST！**
+
+开发板上有一路 USB OTG 接口，使用 I.MX6ULL 的 USB OTG1 接口。此 路 USB OTG 既可以作为主机(HOST)，也可以作为从机(DEVICE)，从而实现完整的 OTG 功能， 原理图如图：
+
+![image-20231112183208513](D:\ZLinux\Linux_driver\image\150.png)
+
+图 中只有一个 Type-C USB 插座，当 OTG 作为从机(DEVICE)的时候 USB 线接入 此接口。当 OTG 作为主机的时候需要使用 Type-C OTG 线。
+USB OTG 通过 ID 线来完成主从机切换，这里就涉及到硬件对 USB ID 线的处理图中 Type-C 的 CC1 和 CC2 引脚就是完成传统的 USB ID 线功能的。我们简单分析一下主从机切换原理：
+
+**从机(DEVICE)模式：**
+
+R111 这一个 49.9K 的电阻，默认将 USB_OTG1_ID 线 拉高，前面我们讲了，当 ID 线为高的时候就表示 OTG工作在从机模式。此时由于USB_OTG1_ID 为高电平，因此 MOS1(SI2302)导通，因此 MT9700HT5 的 EN 脚就接地，此时 MT9700HT5 的 OUT 引脚就没有输出，所以 USB_OTG_VBUS 电压关闭。USB_OTG_VBUS 电压用于在 OTG 做 HOST 功能的时候，向外部设备提供 5V 电源。很明显，在 OTG 做从机的时候，OTG 就不 需要向外界提供 USB_OTG_VBUS 电源了。这里使用 MT9700HT5 这个芯片来实 VBUS 电源的 开关控制。
+
+**主机(HOST)模式：**
+
+如果要使用 OTG 的 HOST 功能，那么必须要使用到 Type-C OTG 线。 Type-C OTG 线会将 CC1 和 CC2 拉低，因此 USB_OTG1_ID 线也会被拉低，当 ID 线为 0 的时 候就表示 OTG 工作在主机模式。此时由于 USB_OTG1_ID 为低，因此 MOS1(SI2302)不导通， ，因此 MT9700HT5 的 EN 脚就会被 R31 这个 10K 电阻上拉到 5V，所以 MT9700HT5 的 OUT 引脚就会输出 5V 电压，也就是说 USB_OTG_VBUS 此时是 5V，可以向外部设备提供 5V 电源。
+
+#### USB协议简析：
+
+##### USB描述符
+
+USB 描述符就是用来描述 USB 信息的，描述符就是一串按照一定规则构建的 字符串，USB 设备使用描述符来向主机报告自己的相关属性信息，常用的描述符如表：
+
+|        描述符类型        |     名字     |  值  |
+| :----------------------: | :----------: | :--: |
+|    Device Descriptor     |  设备描述符  |  1   |
+| Configuration Descriptor |  配置描述符  |  2   |
+|    String Descriptor     | 字符串描述符 |  3   |
+|   Interface Descriptor   |  接口字符串  |  4   |
+|   Endpoint Descriptor    |  端点描述符  |  5   |
+
+1. **设备描述符**
+
+   设备描述符用于描述 USB 设备的一般信息，USB 设备只有一个设备描述符。设备描述符 里面记录了设备的 USB 版本号、设备类型、VID(厂商 ID)、PID(产品 ID)、设备序列号等。设 备描述符结构如表
+   ![image-20231112190213518](D:\ZLinux\Linux_driver\image\151.png)
+   ![image-20231112190228709](D:\ZLinux\Linux_driver\image\152.png)
+
+2. **配置描述符**
+
+   设备描述符的 bNumConfigurations 域定义了一个 USB 设备的配置描述符数量，一个 USB 设备至少有一个配置描述符。配置描述符描述了**设备可提供的接口(Interface)数量、配置编号、 供电信息**等，配置描述符结构如表
+   ![image-20231112192707543](D:\ZLinux\Linux_driver\image\153.png)
+
+3. **字符串描述符**
+
+   字符串描述符是可选的，字符串描述符用于描述一些方便人们阅读的信息，比如制造商、 设备名称啥的。如果一个设备没有字符串描述符，那么其他描述符中和字符串有关的索引值都必须为 0，字符串描述符结构如表：
+   ![image-20231112193018678](D:\ZLinux\Linux_driver\image\154.png)
+
+4. **接口描述符**
+
+   配置描述符中指定了该配置下的接口数量，可以提供一个或多个接口，接口描述符用于描 述接口属性。接口描述符中一般记录接口编号、接口对应的端点数量、接口所述的类等，接口 描述符结构如表
+   ![image-20231112204813655](D:\ZLinux\Linux_driver\image\155.png)
+
+5. **端口描述符**：
+
+   接口描述符定义了其端点数量，端点是设备与主机之间进行数据传输的逻辑接口，除了端 点 0 是双向端口，其他的端口都是单向的。端点描述符描述了传输类型、方向、数据包大小、 端点号等信息，端点描述符结构如表：
+   ![image-20231112204912769](D:\ZLinux\Linux_driver\image\156.png)
+   ![image-20231112204925661](D:\ZLinux\Linux_driver\image\157.png)
+
+##### USB 数据包类型
+
+USB 是串行通信，需要一位一位的去传输数据，USB 传输的时候先将原始数据进行打包， 所以 USB 中传输的基本单元就是数据包。根据用途的不同，USB 协议定义了 4 种不同的包结 构：令牌(Token)包、数据(Data)包、握手(Handshake)包和特殊(Special)包。
+
+这四种包通过包标识 符 PID 来区分，PID 共有 8 位，USB 协议使用低 4 位 PID3~PID0，另外的高四位 PID7~PID4 是 PID3~PID0 的取反，传输顺序是 PID0、PID1、PID2、PID3…PID7。令牌包的 PID1~0 为 01，数 据包的 PID1~0 为 11，握手包的 PID1~0 为 10，特殊包的 PID1~0 为 00。每种类型的包又有多 种具体的包，如表：
+![image-20231112205124500](D:\ZLinux\Linux_driver\image\158.png)
+
+一个完整的包分为多个域，所有的数据包都是以同步域(SYNC)开始，后面紧跟着包标识符 (PID)，最终都以包结束(EOP)信号结束。不同的数据包中间位域不同，一般有包目标地址(ADDR)、 包目标端点(ENDP)、数据、帧索引、CRC 等，这个要具体数据包具体分析。
+
+1. **令牌包**
+
+   ![image-20231112205326182](D:\ZLinux\Linux_driver\image\159.png)
+   首先是 SYNC 同步域，包同步域为 00000001，也 就是连续 7 个 0，后面跟一个 1，如果是高速设备的话就是 31 个 0 后面跟一个 1。紧跟着是 PID， 这里是 SETUP 包，为 0XB4，大家可能会好奇为什么不是 0X2D(00101101)，0XB4 的原因如下：
+
+   - SETUP 包的 PID3~PID0 为 1101，因此对应的 PID7~PID4 就是 0010。
+   - PID 传输顺序为 PID0、PID1、PID2…PID7，因此按照传输顺序排列的话此处的 PID 就 是 10110100=0XB4，并不是 0X2D。
+
+   PID 传输顺序为 PID0、PID1、PID2…PID7，因此按照传输顺序排列的话此处的 PID 就 是 10110100=0XB4，并不是 0X2D。
+
+2. **数据包**
+
+   
+   ![image-20231112210327145](file://D:/ZLinux/Linux_driver/image/160.png?lastModify=1699769126)
+
+   数据包比较简单，同样的，数据包从 SYNC 同步域开始，然后紧跟着是 PID，这里就是 DATA0，PID 值为 0XC3。接下来就是具体的数据，数据完了以后就是 16 位的 CRC 校验值，最 后是 EOP。
+
+   数据包比较简单，同样的，数据包从 SYNC 同步域开始，然后紧跟着是 PID，这里就是 DATA0，PID 值为 0XC3。接下来就是具体的数据，数据完了以后就是 16 位的 CRC 校验值，最 后是 EOP。
+
+3. **握手包**：
+
+   ![image-20231112210834442](C:\Users\Rodney\AppData\Roaming\Typora\typora-user-images\image-20231112210834442.png)
+   首先是 SYNC 同步域，然后就是 ACK 包的 PID，为 0X4B，最后就是 EOP。其他的 NAK、STALL、NYET 和 ERR 握手包结构都是一样的，只是其 中的 PID 不同而已。
+
+   
+
+   ##### USB传输类型
+
+   在端点描述符中 bmAttributes 指定了端点的传输类型，一共有 4 种：
+
+   1. **控制传输**
+
+      控制传输一般用于特定的请求，比如枚举过程就是全部由控制传输来完成的，比如获取描 述符、设置地址、设置配置等。控制传输分为三个阶段：建立阶段(SETUP)、数据阶段(DATA) 和状态阶段(STATUS)，其中数据阶段是可选的。建立阶段使用 SETUP 令牌包，SETUP 使用 DATA0 包。数据阶段是 0 个、1 个或多个输入(IN)/输出(OUT)事务，数据阶段的所有输入事务必须是同一个方向的，比如都为 IN 或都为 OUT。数据阶段的第一个数据包必须是 DATA1，每 次正确传输以后就在 DATA0 和 DATA1 之间进行切换。数据阶段完成以后就是状态阶段，状态 阶段的传输方向要和数据阶段相反，比如数据阶段为 IN 的话状态阶段就要为 OUT，状态阶段 使用 DATA1 包。比如一个读控制传输格式如图：
+      ![image-20231112211006276](D:\ZLinux\Linux_driver\image\161.png)
+
+   2. **同步传输**
+
+      同步传输用于周期性、低时延、数据量大的场合，比如音视频传输，这些场合对于时延要 求很高，但是不要求数据 100%正确，允许有少量的错误。因此，同步传输没有握手阶段，即使 数据传输出错了也不会重传。
+
+   3. **批量传输**
+
+      同步传输用于周期性、低时延、数据量大的场合，比如音视频传输，这些场合对于时延要 求很高，但是不要求数据 100%正确，允许有少量的错误。因此，同步传输没有握手阶段，即使 数据传输出错了也不会重传。
+
+      以批量写为例简单介绍一下批量传输过程：xxxx
+
+      - 主机发出 OUT 令牌包，令牌包里面包含了设备地址、端点等信息
+      - 如果 OUT 令牌包正确的话，也就是设备地址和端点号匹配，主机就会向设备发送一个 数据(DATA)包，发送完成以后主机进入接收模式，等待设备返回握手包，一切都正确的话设备 就会向主机返回一个 ACK 握手信号。
+
+      批量读的过程刚好相反：
+
+      - 主机发出 IN 令牌包，令牌包里面包含了设备地址、端点等信息。发送完成以后主机就 进入到数据接收状态，等待设备返回数据。
+      - 如果 IN 令牌包正确的话，设备就会将一个 DATA 包放到总线上发送给主机。主机收 到这个 DATA 包以后就会向设备发送一个 ACK 握手信号。
+
+   4. **中断传输**
+
+      这里的中断传输并不是我们传统意义上的硬件中断，而是一种保持一定频率的传输，中断 传输适用于传输数据量小、具有周期性并且要求响应速度快的数据，比如键盘、鼠标等。中断 的端点会在端点描述符中报告自己的查询时间间隔，对于时间要求严格的设备可以采用中断传 输。
+
+   ##### USB 枚举
+
+   当 USB 设备与 USB 主机连接以后主机就会对 USB 设备进行枚举，通过枚举来获取设备的描述符信息，主机得到这些信息以后就知道该加载什么样的驱动、如何进行通信等。USB 枚举过程如下：
+
+   1. 第一回合，当 USB 主机检测到 USB 设备插入以后主机会发出总线复位信号来复位设 备。USB 设备复位完成以后地址为 0，主机向地址 0 的端点 0 发送数据，请求设备的描述符。 设备得到请求以后就会按照主机的要求将设备描述符发送给主机，主机得到设备发送过来的设备描述符以后，如果确认无误就会向设备返回一个确认数据包(ACK)。
+   2. 第二回合，主机再次复位设备，进入地址设置阶段。主机向地址 0 的端点 0 发送设置 地址请求数据包，新的设备地址就包含在这个数据包中，因此没有数据过程。设备进入状态过 程，等待主机请求状态返回，收到以后设备就会向主机发送一个 0 字节状态数据包，表明设备 已经设置好地址了，主机收到这个 0 字节状态数据包以后会返回一个确认包(ACK)。设备收到主机发送的 ACK 包以后就会使用这个新的设备地址，至此设备就得到了一个唯一的地址。
+   3. 第三回合，主机向新的设备地址端点 0 发送请求设备描述符数据包，这一次主机要获取整个设备描述符，一共是18个字节。
+   4. 和第③步类似，接下来依次获取配置描述符、配置集合、字符串描述符等等。
+
+## Linux块设备驱动
+
+块设备驱动是 Linux 三大驱动类型之一。块设备驱动要远比字符设备驱动复杂得多，不同类型的存储设备又 对应不同的驱动子系统。这里不涉及到具体的存储设 备
+
+### 什么是块设备
+
+块设备是针对存储设备的，比如 SD 卡、EMMC、NAND Flash、Nor Flash、SPI Flash、机 械硬盘、固态硬盘等。因此块设备驱动其实就是这些存储设备驱动，块设备驱动相比字符设备 驱动的主要区别如下：
+
+1. 块设备只能以块为单位进行读写访问，块是 linux 虚拟文件系统(VFS)基本的数据传输 单位。字符设备是以字节为单位进行数据传输的，不需要缓冲。
+2. 块设备在结构上是可以进行随机访问的，对于这些设备的读写都是按块进行的，块设 备使用缓冲区来暂时存放数据，等到条件成熟以后再一次性将缓冲区中的数据写入块设备中。 这么做的目的为了提高块设备寿命，大家如果仔细观察的话就会发现有些硬盘或者 NAND Flash 就会标明擦除次数(flash 的特性，写之前要先擦除)，比如擦除 100000 次等。因此，为了提高块 设备寿命引入了缓冲区，数据先写入到缓冲区中，等满足一定条件后再一次性写入到真正的物 理存储设备中，这样就减少了对块设备的擦除次数，提高了块设备寿命。
+
+字符设备是顺序的数据流设备，字符设备是按照字节进行读写访问的。字符设备不需要缓冲区，对于字符设备的访问都是实时的，而且也不需要按照固定的块大小进行访问。
+
+块设备结构的不同其 I/O 算法也会不同，比如对于 EMMC、SD 卡、NAND Flash 这类没有 任何机械设备的存储设备就可以任意读写任何的扇区(块设备物理存储单元)。但是对于机械硬 盘这样带有磁头的设备，读取不同的盘面或者磁道里面的数据，磁头都需要进行移动，因此对 于机械硬盘而言，将那些杂乱的访问按照一定的顺序进行排列可以有效提高磁盘性能，linux 里 面针对不同的存储设备实现了不同的 I/O 调度算法。
+
+### 块设备驱动框架
+
+#### block_device 结构体
+
+linux 内 核 使 用 block_device 表 示 块 设 备 ， block_device 为 一 个 结 构 体 ， 定 义 在 include/linux/fs.h 文件中，结构体内容如下
+
+```c
+struct block_device {
+	dev_t bd_dev; /* not a kdev_t - it's a search key */
+	int bd_openers;
+	struct inode *bd_inode; /* will die */
+	struct super_block *bd_super;
+	struct mutex bd_mutex; /* open/close mutex */
+	struct list_head bd_inodes;
+	void * bd_claiming;
+	void * bd_holder;
+	int bd_holders;
+	bool bd_write_holder;
+#ifdef CONFIG_SYSFS
+	struct list_head bd_holder_disks;
+#endif
+	struct block_device *bd_contains;
+	unsigned bd_block_size;
+	struct hd_struct *bd_part;
+	/*number of times partitions within this device have been opened.*/
+	unsigned bd_part_count;
+	int bd_invalidated;
+	struct gendisk *bd_disk;
+	struct request_queue *bd_queue;
+	struct list_head bd_list;
+	/*
+	* Private data. You must have bd_claim'ed the block_device
+	* to use this. NOTE: bd_claim allows an owner to claim
+	* the same device multiple times, the owner must take special
+	* care to not mess up bd_private for that case.
+	*/
+	unsigned long bd_private;
+	/* The counter of freeze processes */
+	int bd_fsfreeze_count;
+	/* Mutex for freeze */
+	struct mutex bd_fsfreeze_mutex;
+};
+```
+
+对于 block_device 结构体，我们重点关注一下第 21 行的 bd_disk 成员变量，此成员变量为 gendisk 结构体指针类型。内核使用 block_device 来表示一个具体的块设备对象，比如一个硬盘或者分区，如果是硬盘的话 bd_disk 就指向通用磁盘结构 gendisk。
+
+##### 1、注册块设备
+
+和字符设备驱动一样，我们需要向内核注册新的块设备、申请设备号，块设备注册函数为register_blkdev，函数原型如下：
+
+![image-20231112215658555](D:\ZLinux\Linux_driver\image\162.png)
+
+##### 2、注销块设备
+
+和字符设备驱动一样，如果不使用某个块设备了，那么就需要注销掉，函数为 unregister_blkdev，函数原型如下：
+
+![image-20231112215753822](D:\ZLinux\Linux_driver\image\163.png)
+
+#### gendisk 结构体
+
+linux 内核使用 gendisk 来描述一个磁盘设备，这是一个结构体，定义在 include/linux/genhd.h 中，内容如下：
+
+```c
+struct gendisk {
+	/* major, first_minor and minors are input parameters only,
+	* don't use directly. Use disk_devt() and disk_max_parts().
+	*/
+	int major; /* major number of driver */
+	int first_minor;
+	int minors; /* maximum number of minors, =1 for
+	* disks that can't be partitioned. */
+	
+	char disk_name[DISK_NAME_LEN]; /* name of major driver */
+	char *(*devnode)(struct gendisk *gd, umode_t *mode);
+	
+	unsigned int events; /* supported events */
+	unsigned int async_events; /* async events, subset of all */
+	
+	/* Array of pointers to partitions indexed by partno.
+	* Protected with matching bdev lock but stat and other
+	* non-critical accesses use RCU. Always access through
+	* helpers.
+	*/
+	struct disk_part_tbl __rcu *part_tbl;
+	struct hd_struct part0;
+	
+	const struct block_device_operations *fops;
+	struct request_queue *queue;
+	void *private_data;
+	
+	int flags;
+	struct device *driverfs_dev; // FIXME: remove
+	struct kobject *slave_dir;
+	
+	struct timer_rand_state *random;
+	atomic_t sync_io; /* RAID */
+	struct disk_events *ev;
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+	struct blk_integrity *integrity;
+#endif
+	int node_id;
+};
+```
+
+ gendisk 结构体中比较重要的几个成员变量：
+
+- 第 5 行，major 为磁盘设备的主设备号。
+- 第 6 行，first_minor 为磁盘的第一个次设备号。
+- 第 7 行，minors 为磁盘的次设备号数量，也就是磁盘的分区数量，这些分区的主设备号一 样，次设备号不同。
+- 第 21 行，part_tbl 为磁盘对应的分区表，为结构体 disk_part_tbl 类型，disk_part_tbl 的核心是一个 hd_struct 结构体指针数组，此数组每一项都对应一个分区信息。
+- 第 24 行，fops 为块设备操作集，为 block_device_operations 结构体类型。和字符设备操作 集 file_operations 一样，是块设备驱动中的重点！
+- 第 25 行，queue 为磁盘对应的请求队列，所以针对该磁盘设备的请求都放到此队列中，驱动程序需要处理此队列中的所有请求。
+
+##### 1、申请gendisk
+
+使用 gendisk 之前要先申请，allo_disk 函数用于申请一个 gendisk，函数原型如下：
+
+![image-20231113111931362](D:\ZLinux\Linux_driver\image\164.png)
+
+##### 2、删除gendisk
+
+如果要删除 gendisk 的话可以使用函数 del_gendisk，函数原型如下：
+
+![image-20231113112133390](D:\ZLinux\Linux_driver\image\165.png)
+
+##### 3、将gendisk添加到内核
+
+使用 alloc_disk 申请到 gendisk 以后系统还不能使用，必须使用 add_disk 函数将申请到的 gendisk 添加到内核中，add_disk 函数原型如下：
+
+![image-20231113112234555](D:\ZLinux\Linux_driver\image\166.png)
+
+##### 4、设置gendisk容量
+
+每一个磁盘都有容量，所以在初始化 gendisk 的时候也需要设置其容量，使用函数 set_capacity，函数原型如下：![image-20231113112355143](D:\ZLinux\Linux_driver\image\167.png)
+	**size：**磁盘容量大小，注意这里是**扇区数量**。块设备中最小的可寻址单元是扇区，一个扇区 一般是 512 字节，有些设备的物理扇区可能不是 512 字节。不管物理扇区是多少，内核和块设备驱动之间的扇区都是 512 字节。所以 set_capacity 函数设置的大小就是块设备实际容量除以 512 字节得到的扇区数量。比如一个 2MB 的磁盘，其扇区数量就是(2*1024*1024)/512=4096。
+	**返回值：**无
+
+##### 5、调整gendisk引用计数
+
+内核会通过 get_disk 和 put_disk 这两个函数来调整 gendisk 的引用计数，根据名字就可以 知道，get_disk 是增加 gendisk 的引用计数，put_disk 是减少 gendisk 的引用计数，这两个函数原 型如下所示：
+
+![image-20231113113927964](D:\ZLinux\Linux_driver\image\168.png)
+
+#### block_device_operations 结构体
+
+和字符设备的 file _operations 一样，块设备也有操作集，为结构体 block_device_operations， 此结构体定义在 include/linux/blkdev.h 中，结构体内容如下：
+
+```c
+struct block_device_operations {
+	int (*open) (struct block_device *, fmode_t);
+	void (*release) (struct gendisk *, fmode_t);
+	int (*rw_page)(struct block_device *, sector_t, struct page *, int rw);
+	int (*ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
+	int (*compat_ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
+	long (*direct_access)(struct block_device *, sector_t,
+	void **, unsigned long *pfn, long size);
+	unsigned int (*check_events) (struct gendisk *disk,
+	unsigned int clearing);
+	/* ->media_changed() is DEPRECATED, use ->check_events() instead */
+	int (*media_changed) (struct gendisk *);
+	void (*unlock_native_capacity) (struct gendisk *);
+	int (*revalidate_disk) (struct gendisk *);
+	int (*getgeo)(struct block_device *, struct hd_geometry *);
+	/* this callback is with swap_lock and sometimes page table lock held */
+	void (*swap_slot_free_notify) (struct block_device *, unsigned long);
+	struct module *owner;
+};
+```
+
+block_device_operations 结构体里面的操作集函数和字符设备的 file_operations 操作集基本类似，但是块设备的操作集函数比较少，我们来看一下其中比较重要的几个成员函 数：
+
+- 第 2 行，open 函数用于打开指定的块设备。
+- 第 3 行，release 函数用于关闭(释放)指定的块设备。
+- 第 4 行，rw_page 函数用于读写指定的页。
+- 第 5 行，ioctl 函数用于块设备的 I/O 控制。
+- 第 6 行，compat_ioctl 函数和 ioctl 函数一样，都是用于块设备的 I/O 控制。区别在于在 64位系统上，32位应用程序的 ioctl会调用compat_iotl函数。在 32位系统上运行的32位应用程序调用的就是 ioctl 函数。
+- 第 15 行，getgeo 函数用于获取磁盘信息，包括磁头、柱面和扇区等信息。
+- 第 18 行，owner 表示此结构体属于哪个模块，一般直接设置为 THIS_MODULE。
+
+#### 块设备 I/O 请求过程
+
+在 block_device_operations 结构体中并没有找到 read 和 write 这样 的读写函数，那么块设备是怎么从物理块设备中读写数据？这里就引出了块设备驱动中非常重 要的 request_queue、request 和 bio。
+
+##### 1、请求队列request_queue
+
+内核将对块设备的读写都发送到请求队列 request_queue 中，request_queue 中是大量的 request(请求结构体)，而 request 又包含了 bio，bio 保存了读写相关数据，比如从块设备的哪个 地址开始读取、读取的数据长度，读取到哪里，如果是写的话还包括要写入的数据等。先来看一下request_queue，这是一个结构体，定义在文件 include/linux/blkdev.h 中，由于 request_queue 结构体比较长，这里就不列出来了。gendisk 结构体就会发现里面有一个 request_queue 结构体指针类型成员变量 queue，也就说在编写块设 备驱动的时候，每个磁盘(gendisk)都要分配一个 request_queue。
+
+###### 初始化请求队列
+
+我们首先需要申请并初始化一个 request_queue，然后在初始化 gendisk 的时候将这个 request_queue 地址赋值给 gendisk 的 queue 成员变量。使用 blk_init_queue 函数来完成 request_queue 的申请与初始化，函数原型如下：
+![image-20231113124803614](D:\ZLinux\Linux_driver\image\169.png)
+
+###### 删除请求队列
+
+当卸载块设备驱动的时候我们还需要删除掉前面申请到的 request_queue，删除请求队列使用函数 blk_cleanup_queue，函数原型如下：
+![image-20231113130724501](D:\ZLinux\Linux_driver\image\170.png)
+
+###### 分配请求队列并绑定制造请求函数
+
+blk_init_queue 函数完成了请求队列的申请以及请求处理函数的绑定，这个一般用于像机械 硬盘这样的存储设备，需要 I/O 调度器来优化数据读写过程。但是对于 EMMC、SD 卡这样的 非机械设备，可以进行完全随机访问，所以就不需要复杂的 I/O 调度器了。对于非机械设备我 们可以先申请 request_queue，然后将申请到的 request_queue 与“制造请求”函数绑定在一起。 先来看一下 request_queue 申请函数 **blk_alloc_queue（申请无IO调度的request_queue）**，函数原型如下：
+![image-20231113130932991](D:\ZLinux\Linux_driver\image\171.png)
+
+我们需要为 blk_alloc_queue 函数申请到的请求队列绑定一个“制造请求”函数(其他参考资 料将其直接翻译为“制造请求”函数)。这里我们需要用到函数 blk_queue_make_request，函数 原型如下：
+![image-20231113131024563](D:\ZLinux\Linux_driver\image\172.png)
+
+一般 blk_alloc_queue 和 blk_queue_make_request 是搭配在一起使用的，用于那么非机械的 存储设备、无需 I/O 调度器，比如 EMMC、SD 卡等。blk_init_queue 函数会给请求队列分配一 个 I/O 调度器，用于机械存储设备，比如机械硬盘等。
+
+##### 2、请求 request
+
+请求队列(request_queue)里面包含的就是一系列的请求(request)，request 是一个结构体，定 义在 include/linux/blkdev.h 里面，这里就不展开 request 结构体了，太长了。request 里面有一个 名为“bio”的成员变量，类型为 bio 结构体指针。前面说了，真正的数据就保存在 bio 里面， 所以我们需要从 request_queue 中取出一个一个的 request，然后再从每个 request 里面取出 bio， 最后根据 bio 的描述将数据写入到块设备，或者从块设备中读取数据。
+
+###### 获取请求
+
+需要从request_queue中依次获取每个request，使用blk_peek_request函数完成此操作， 函数原型如下：
+![image-20231113132511880](D:\ZLinux\Linux_driver\image\173.png)
+
+###### 开启请求
+
+使用 blk_peek_request 函数获取到下一个要处理的请求以后就要开始处理这个请求，这里 要用到 blk_start_request 函数，函数原型如下：
+![image-20231113132719007](D:\ZLinux\Linux_driver\image\174.png)
+
+###### 一步到位处理请求
+
+可以使用 blk_fetch_request 函数来一次性完成请求的获取和开启，blk_fetch_request 函数很简单，内容如下：
+![image-20231113133147323](D:\ZLinux\Linux_driver\image\175.png)
+
+blk_fetch_request 就是直接调用了 blk_peek_request 和 blk_start_request 这两个函 数。
+
+###### 其他和请求有关的函数
+
+![image-20231113133337662](D:\ZLinux\Linux_driver\image\176.png)
+
+##### 3、bio结构
+
+每个 request 里面会有多个 bio，bio 保存着最终要读写的数据、地址等信息。上层应用程序 对于块设备的读写会被构造成一个或多个 bio 结构，bio 结构描述了要读写的起始扇区、要读写 的扇区数量、是读取还是写入、页偏移、数据长度等等信息。上层会将 bio 提交给 I/O 调度器， I/O 调度器会将这些 bio 构造成 request 结构，而一个物理存储设备对应一个 request_queue， request_queue 里面顺序存放着一系列的 request。新产生的 bio 可能被合并到 request_queue 里现 有的 request 中，也可能产生新的 request，然后插入到 request_queue 中合适的位置，这一切都 是由 I/O 调度器来完成的。request_queue、request 和 bio 之间的关系如图：
+![image-20231113133701550](D:\ZLinux\Linux_driver\image\177.png)
+
+bio 是个结构体，定义在 include/linux/blk_types.h 中，结构体内容如下：
+
+```c
+struct bio {
+	struct bio *bi_next; /* 请求队列的下一个 bio */
+	struct block_device *bi_bdev; /* 指向块设备 */
+	unsigned long bi_flags; /* bio 状态等信息 */
+	unsigned long bi_rw; /* I/O 操作,读或写 */
+	struct bvec_iter bi_iter; /* I/O 操作,读或写 */
+	unsigned int bi_phys_segments;
+	unsigned int bi_seg_front_size;
+	unsigned int bi_seg_back_size;
+	atomic_t bi_remaining;
+	bio_end_io_t *bi_end_io;
+	void *bi_private;
+#ifdef CONFIG_BLK_CGROUP
+	/*
+	* Optional ioc and css associated with this bio. Put on bio
+	* release. Read comment on top of bio_associate_current().
+	*/
+	struct io_context *bi_ioc;
+	struct cgroup_subsys_state *bi_css;
+#endif
+	union {
+#if defined(CONFIG_BLK_DEV_INTEGRITY)
+	struct bio_integrity_payload *bi_integrity;
+#endif
+	};
+	
+	unsigned short bi_vcnt; /* bio_vec 列表中元素数量 */
+	unsigned short bi_max_vecs; /* bio_vec 列表长度 */
+	atomic_t bi_cnt; /* pin count */
+	struct bio_vec *bi_io_vec; /* bio_vec 列表 */
+	struct bio_set *bi_pool;
+	struct bio_vec bi_inline_vecs[0];
+};
+```
+
+重点看一下**bvec_iter** 结构体类型的成员变量，和bio_vec 结构体指针类型的成员变量。
+
+bvec_iter 结构体描述了要操作的**设备扇区等信息**，结构体内容如下：
+
+```c
+struct bvec_iter {
+	sector_t bi_sector; /* I/O 请求的设备起始扇区(512 字节) */
+	unsigned int bi_size; /* 剩余的 I/O 数量 */
+	unsigned int bi_idx; /* blv_vec 中当前索引 */
+	unsigned int bi_bvec_done; /* 当前 bvec 中已经处理完成的字节数 */
+};
+```
+
+**bio_vec** 结构体描述了内容如下：
+
+```c
+struct bio_vec {
+	struct page *bv_page; /* 页 */
+	unsigned int bv_len; /* 长度 */
+	unsigned int bv_offset; /* 偏移 */
+};
+```
+
+可以看出 bio_vec 就是“page,offset,len”组合，page 指定了所在的物理页，offset 表示所处 页的偏移地址，len 就是数据长度。
+
+我们对于物理存储设备的操作不外乎就是将 RAM 中的数据写入到物理存储设备中，或者 将物理设备中的数据读取到 RAM 中去处理。数据传输三个要求：**数据源、数据长度以及数据目的地**，也就是你要从物理存储设备的哪个地址开始读取、读取到 RAM 中的哪个地址处、读 取的数据长度是多少。既然 bio 是块设备最小的数据传输单元，那么 bio 就有必要描述清楚这 些信息，其中 bi_iter 这个结构体成员变量就用于描述物理存储设备地址信息，比如要操作的扇 区地址。bi_io_vec 指向 bio_vec 数组首地址，bio_vec 数组就是 RAM 信息，比如页地址、页偏 移以及长度，“页地址”是 linux 内核里面内存管理相关的概念，这里我们不深究 linux 内存管 理，我们只需要知道对于 RAM 的操作最终会转换为页相关操作。
+
+bio、bvec_iter 以及 bio_vec 这三个机构体之间的关系如图：
+![image-20231113135846266](D:\ZLinux\Linux_driver\image\178.png)
+
+###### 遍历请求中的bio
+
+请求中包含有大量的 bio，因此就涉及到遍历请求中所有 bio 并进行处理。遍历 请求中的 bio 使用函数__rq_for_each_bio，这是一个宏，内容如下：
+
+![image-20231113140648089](D:\ZLinux\Linux_driver\image\179.png)
+
+_ ___bio就是遍历出来的每个 bio，rq是要进行遍历操作的请求，_____bio 参数为 bio 结构体指针类 型，rq参数为request 结构体指针类
+
+###### 遍历 bio 中的所有段
+
+bio 包含了最终要操作的数据，因此还需要遍历 bio 中的所有段，这里要用到 bio_for_each_segment 函数，此函数也是一个宏，内容如下：
+![image-20231113142722255](D:\ZLinux\Linux_driver\image\180.png)
+
+第一个 bvl 参数就是遍历出来的每个 bio_vec，第二个 bio 参数就是要遍历的 bio，类型为 bio 结构体指针，第三个 iter 参数保存要遍历的 bio 中 bi_iter 成员变量。
+
+###### 通知bio处理结束
+
+如果使用“制造请求”，也就是抛开 I/O 调度器直接处理 bio 的话，在 bio 处理完成以后要 通过内核 bio 处理完成，使用 bio_endio 函数，函数原型如下：
+![image-20231113142929351](D:\ZLinux\Linux_driver\image\181.png)
+![image-20231113142952501](D:\ZLinux\Linux_driver\image\182.png)
+
+### 使用请求队列实验
+
+关于块设备架构就讲解这些，接下来我们使用开发板上的 RAM 模拟一段块设备，也就是 ramdisk，然后编写块设备驱动。
+
+详见开发指南68.3 P1669
+
+### 不使用请求队列实验
+
+详见开发指南68.4 P1676
+
